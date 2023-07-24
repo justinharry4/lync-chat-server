@@ -1,4 +1,6 @@
 from django.db import models
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.conf import settings
 
 
@@ -15,4 +17,45 @@ class ProfilePhoto(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='photos')
     image = models.ImageField(upload_to='chat/images')
     uploaded_at = models.DateTimeField(auto_now=True)
+
+
+class Chat(models.Model):
+    PARENT_CHAT_PRIVATE = 'PC'
+    PARENT_CHAT_GROUP = 'GC'
+    PARENT_CHAT_CHOICES = [
+        (PARENT_CHAT_PRIVATE, 'PRIVATE CHAT'),
+        (PARENT_CHAT_GROUP, 'GROUP CHAT')
+    ]
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    termination_date = models.DateTimeField(null=True)
+    last_active = models.DateTimeField(null=True)
+    parent_chat_type = models.CharField(max_length=2, choices=PARENT_CHAT_CHOICES)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    parent_chat = GenericForeignKey()
+    
+
+class PrivateChat(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    chats = GenericRelation(Chat, related_query_name='private_chat')
+    participant_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through='PrivateChatParticipant',
+        related_name='private_chats'
+    )
+
+
+class PrivateChatParticipant(models.Model):
+    private_chat = models.ForeignKey(
+        PrivateChat,
+        on_delete=models.CASCADE,
+        related_name='participants'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='private_chat_memberships'
+    )
+    
 
