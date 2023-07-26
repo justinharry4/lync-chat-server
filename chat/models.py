@@ -27,9 +27,9 @@ class Chat(models.Model):
         (PARENT_CHAT_GROUP, 'GROUP CHAT')
     ]
 
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     created_at = models.DateTimeField(auto_now_add=True)
-    termination_date = models.DateTimeField(null=True)
-    last_active = models.DateTimeField(null=True)
+    terminated_at = models.DateTimeField(null=True)
     parent_chat_type = models.CharField(max_length=2, choices=PARENT_CHAT_CHOICES)
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()

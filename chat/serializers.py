@@ -2,9 +2,42 @@ from django.db import transaction
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 
 from .models import Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
 
+
+class StrictUpdateModelSerializer(serializers.ModelSerializer):
+    class CustomMeta:
+        pass
+
+    def get_update_fields(self):
+        try:
+            fields = self.CustomMeta.update_fields
+            if not len(fields) > 0:
+                raise ValueError(
+                    'CustomMeta.update_fields must be a non-empty list'
+                )
+        except AttributeError:
+            raise ValueError(
+                'update_fields attribute on CustomMeta must be provided '
+                'as a non-empty list.'
+            )
+        
+        return fields
+    
+    def update(self, instance, validated_data):
+        update_fields = self.get_update_fields()
+
+        for attr in validated_data:
+            if attr not in update_fields:
+                raise serializers.ValidationError(
+                    f'`{attr}` field update is not allowed.'
+                )
+
+        return super().update(instance, validated_data)
+
+    
 
 class ProfilePhotoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -108,31 +141,24 @@ class CreatePrivateChatSerializer(serializers.Serializer):
         return private_chat
 
 
-class ChatSerializer(serializers.ModelSerializer):
-    termination_date = serializers.ReadOnlyField()
-    last_active = serializers.ReadOnlyField()
+class ChatSerializer(StrictUpdateModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+    parent_chat_type = serializers.ReadOnlyField()
     parent_chat = serializers.SerializerMethodField()
 
     class Meta:
         model = Chat
         fields = [
             'id',
+            'user',
             'created_at',
-            'termination_date',
-            'last_active',
+            'terminated_at',
             'parent_chat_type',
             'parent_chat',
         ]
 
-    # def validate_parent_chat_id(self, parent_chat_id):
-    #     model = self.get_parent_chat_model()
-    #     print(model.objects.all())
-    #     if not model.objects.filter(pk=parent_chat_id).exists():
-    #         raise serializers.ValidationError(
-    #             f'A {model.__name__} object with id `{parent_chat_id}` does not exist'
-    #         )
-        
-    #     return parent_chat_id
+    class CustomMeta:
+        update_fields = ['terminated_at']
 
     def create(self, validated_data):
         parent_chat_id = self.context['parent_chat_id']
@@ -145,6 +171,8 @@ class ChatSerializer(serializers.ModelSerializer):
             )
 
         return Chat.objects.create(
+            user=self.context['user'],
+            parent_chat_type=self.context['parent_chat_type'],
             content_type=content_type,
             object_id=parent_chat_id,
             **validated_data

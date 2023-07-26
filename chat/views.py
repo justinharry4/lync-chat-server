@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework import mixins
-from rest_framework.permissions import IsAdminUser, AllowAny
+from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.decorators import action
 
 from .models import Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
@@ -20,6 +20,7 @@ from .serializers import (ChatSerializer, CreatePrivateChatSerializer,
 class ProfileViewSet(ModelViewSet):
     queryset = Profile.objects.prefetch_related('photos').all()
     serializer_class = ProfileSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete']
 
     def get_serializer_class(self):
         if self.action == 'modify_active_status':
@@ -101,13 +102,15 @@ class ProfilePhotoViewSet(NoUpdateModelViewSet):
 
 
 class PrivateChatViewSet(NoUpdateModelViewSet):
+    permission_classes = [IsAuthenticated]
+
     def get_queryset(self):
         # from core.models import User
         # user = User.objects.get(pk=2)
         user = self.request.user
         if user.is_staff:
             return PrivateChat.objects.all()
-        
+
         return user.private_chats.all()
     
     def get_serializer_class(self):
@@ -132,6 +135,7 @@ class PrivateChatParticipantViewSet(ReadOnlyModelViewSet):
 
 class ChatViewSet(ModelViewSet):
     serializer_class = ChatSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete']
 
     def get_queryset(self):
         parent_type = self.get_serializer_context()['parent_chat_type']
@@ -144,12 +148,15 @@ class ChatViewSet(ModelViewSet):
 
     def get_serializer_context(self):
         if self.kwargs.get('private_chat_pk'):
-            return {
+            context = {
                 'parent_chat_type': 'PC',
                 'parent_chat_id': self.kwargs['private_chat_pk']
             }
         elif self.kwargs.get('group_chat_pk'):
-            return {
+            context = {
                 'parent_chat_type': 'GC',
                 'parent_chat_id': self.kwargs['group_chat_pk']
             }
+
+        context['user'] = self.request.user
+        return context
