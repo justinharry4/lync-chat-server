@@ -4,6 +4,13 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 from django.conf import settings
 
 
+def get_user_model():
+    app_name, user_model_name = settings.AUTH_USER_MODEL.split('.')
+    content_type = ContentType.objects.get(app_label=app_name, model=user_model_name)
+    user_model = content_type.model_class()
+
+    return user_model
+
 class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     is_online = models.BooleanField(default=False)

@@ -4,7 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from .models import Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
+from .models import get_user_model, Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
 
 
 class StrictUpdateModelSerializer(serializers.ModelSerializer):
@@ -91,10 +91,11 @@ class PrivateChatParticipantSerializer(serializers.ModelSerializer):
 
 class PrivateChatSerializer(serializers.ModelSerializer):
     participants = PrivateChatParticipantSerializer(many=True)
+    chats = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     class Meta:
         model = PrivateChat
-        fields = ['id', 'created_at', 'participants']
+        fields = ['id', 'created_at', 'participants', 'chats']
 
 
 class CreatePrivateChatSerializer(serializers.Serializer):
@@ -113,9 +114,7 @@ class CreatePrivateChatSerializer(serializers.Serializer):
                 'a private chat must have 2 different participants.'
             )
         
-        app_name, user_model_name = settings.AUTH_USER_MODEL.split('.')
-        content_type = ContentType.objects.get(app_label=app_name, model=user_model_name)
-        user_model = content_type.model_class()
+        user_model = get_user_model()
 
         for user_id in user_ids:
             if not user_model.objects.filter(pk=user_id).exists():
@@ -161,6 +160,8 @@ class ChatSerializer(StrictUpdateModelSerializer):
         update_fields = ['terminated_at']
 
     def create(self, validated_data):
+        user = self.validate_user(self.context['user'])
+
         parent_chat_id = self.context['parent_chat_id']
         model = self.get_parent_chat_model()
         content_type = ContentType.objects.get_for_model(model)
@@ -171,12 +172,25 @@ class ChatSerializer(StrictUpdateModelSerializer):
             )
 
         return Chat.objects.create(
-            user=self.context['user'],
+            user=user,
             parent_chat_type=self.context['parent_chat_type'],
             content_type=content_type,
             object_id=parent_chat_id,
             **validated_data
         )
+
+    def validate_user(self, user):
+        parent_model = self.get_parent_chat_model()
+        parent_chat_id = self.context['parent_chat_id']
+        parent_chat = parent_model.objects.get(pk=parent_chat_id)
+
+        if not parent_chat.participant_users.filter(pk=user.id).exists():
+            raise serializers.ValidationError(
+                f'{parent_model.__name__} object with id `{parent_chat_id}` '
+                f'does not have the current user as one of its participants'
+            )
+        
+        return user
     
     def get_parent_chat(self, chat):
         if self.context['parent_chat_type'] == 'PC':
