@@ -7,7 +7,7 @@ from rest_framework import mixins
 from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.decorators import action
 
-from .viewsets import NoUpdateModelViewSet
+from .viewsets import CustomWriteModelViewSet, CustomWriteNoUpdateModelViewSet, NoUpdateModelViewSet
 from .models import (Profile,
                      ProfilePhoto,
                      PrivateChat,
@@ -19,40 +19,43 @@ from .models import (Profile,
 from .serializers import (CreateGroupChatSerializer, GroupChatAdminSerializer, GroupChatParticipantSerializer, GroupChatSerializer,
                           ChatSerializer,
                           CreatePrivateChatSerializer,
-                          ModifyProfileStatusSerializer,
+                          UpdateStatusProfileSerializer,
                           PrivateChatParticipantSerializer,
                           PrivateChatSerializer,
                           ProfilePhotoSerializer,
                           ProfileSerializer)
+from . import serializers as ser
 
 
-class ProfileViewSet(ModelViewSet):
+class ProfileViewSet(CustomWriteModelViewSet):
     queryset = Profile.objects.prefetch_related('photos').all()
-    serializer_class = ProfileSerializer
     http_method_names = ['get', 'post', 'patch', 'delete']
+    retrieve_serializer_class = ser.ProfileSerializer
 
     def get_serializer_class(self):
-        if self.action == 'modify_active_status':
-            return ModifyProfileStatusSerializer
-        else: 
-            return ProfileSerializer
+        if self.action == 'partial_update':
+            return ser.UpdateProfileSerializer
+        elif self.action == 'update_active_status':
+            return ser.UpdateStatusProfileSerializer
+        return ser.ProfileSerializer
 
     def get_permissions(self):
-        if self.action in ['list', 'destroy', 'modify_active_status']:
+        if self.action in ['list', 'destroy', 'update_active_status']:
             return [IsAdminUser()]
         else: 
             return [AllowAny()]
 
     @action(detail=True, url_path='status', methods=['PATCH'])
-    def modify_active_status(self, request, pk):
+    def update_active_status(self, request, pk):
         profile = get_object_or_404(Profile, pk=pk)
-        # serializer_class = self.get_serializer_class()
-        serializer = self.get_serializer(profile, data=request.data)
+        serializer = UpdateStatusProfileSerializer(profile, data=request.data)
         serializer.is_valid(raise_exception=True)
         mod_profile = serializer.save()
 
-        ret_serializer = ProfileSerializer(mod_profile)
-        return Response(ret_serializer.data)
+        ret_serializer = ser.ProfileSerializer(mod_profile)
+        return Response(ret_serializer.data, status=status.HTTP_200_OK)
+    
+
 
 
 class ProfilePhotoViewSet(NoUpdateModelViewSet):
@@ -223,4 +226,5 @@ class GroupChatAdminViewSet(ModelViewSet):
     def get_serializer_context(self):
         context = {'group_chat_id': self.kwargs['group_chat_pk']}
         return context
+
     

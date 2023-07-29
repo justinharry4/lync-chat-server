@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Field
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
@@ -10,7 +11,7 @@ from .models import GroupChat, GroupChatAdmin, GroupChatParticipant, get_user_mo
 class StrictUpdateModelSerializer(serializers.ModelSerializer):
     class CustomMeta:
         pass
-
+    
     def get_update_fields(self):
         try:
             fields = self.CustomMeta.update_fields
@@ -26,14 +27,31 @@ class StrictUpdateModelSerializer(serializers.ModelSerializer):
         
         return fields
     
-    def update(self, instance, validated_data):
-        update_fields = self.get_update_fields()
+    def is_model_field(self, field):
+        model = self.Meta.model
+        field_names = [f.name for f in model._meta.get_fields() if f.name != 'id']
 
-        for attr in validated_data:
-            if attr not in update_fields:
-                raise serializers.ValidationError(
-                    f'`{attr}` field update is not allowed.'
-                )
+        return field in field_names
+        
+
+    def check_allowed_fields(self):
+        errors = {}
+        for field in self.initial_data:
+            if field not in self.validated_data and self.is_model_field(field):
+                errors[field] = 'field update is not allowed'
+        
+        self.strict_update_errors = errors
+    
+    def update(self, instance, validated_data):
+        if len(self.validated_data) == 0:
+            raise serializers.ValidationError(
+                'at least one valid update field must be included'
+            )
+        
+        self.check_allowed_fields()
+
+        if self.strict_update_errors:
+            raise serializers.ValidationError(self.strict_update_errors)
 
         return super().update(instance, validated_data)
 
@@ -52,9 +70,11 @@ class ProfilePhotoSerializer(serializers.ModelSerializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-    photos = ProfilePhotoSerializer(many=True, read_only=True)
+    last_seen = serializers.ReadOnlyField()
+    is_online = serializers.ReadOnlyField()
     is_active = serializers.ReadOnlyField()
-    latest_photo = serializers.SerializerMethodField()
+    photos = ProfilePhotoSerializer(many=True, read_only=True)
+    # latest_photo = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
@@ -64,20 +84,22 @@ class ProfileSerializer(serializers.ModelSerializer):
             'last_seen',
             'is_online',
             'is_active',
-            'is_photo_removed',
-            'photos',
-            'latest_photo'
+            'photos'
         ]
 
-    def get_latest_photo(self, profile):
-        sort_key = lambda p: p.uploaded_at
-        sorted_photos = sorted(profile.photos.all(), key=sort_key, reverse=True)
+    # def get_latest_photo(self, profile):
+    #     sort_key = lambda p: p.uploaded_at
+    #     sorted_photos = sorted(profile.photos.all(), key=sort_key, reverse=True)
 
-        if len(sorted_photos) > 0:
-            return sorted_photos[0].id
-        
+    #     if len(sorted_photos) > 0:
+    #         return sorted_photos[0].id
 
-class ModifyProfileStatusSerializer(serializers.ModelSerializer):
+class UpdateProfileSerializer(StrictUpdateModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ['last_seen', 'is_online']
+
+class UpdateStatusProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ['is_active']
@@ -232,7 +254,7 @@ class GroupChatParticipantSerializer(serializers.ModelSerializer):
         return participant
 
 
-class GroupChatAdminSerializer(StrictUpdateModelSerializer):
+class GroupChatAdminSerializer(serializers.ModelSerializer):
     group_chat = serializers.PrimaryKeyRelatedField(read_only=True)
     is_creator = serializers.BooleanField(read_only=True)
     
