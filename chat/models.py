@@ -61,8 +61,54 @@ class PrivateChatParticipant(models.Model):
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name='private_chat_memberships'
     )
     
+
+class GroupChat(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='created_groups'
+    )
+    chats = GenericRelation(Chat, related_query_name='group_chat')
+    participant_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through='GroupChatParticipant',
+        related_name='group_chats'
+    )
+    admin_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through='GroupChatAdmin',
+    )
+
+class GroupChatParticipant(models.Model):
+    group_chat = models.ForeignKey(
+        GroupChat,
+        on_delete=models.CASCADE,
+        related_name='participants'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='group_chat_memberships'
+    )
+    date_joined = models.DateTimeField(auto_now_add=True)
+
+
+class GroupChatAdmin(models.Model):
+    group_chat = models.ForeignKey(
+        GroupChat,
+        on_delete=models.CASCADE,
+        related_name='admins'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+    )
+    is_active = models.BooleanField(default=True)
+    is_creator = models.BooleanField(default=False)
+
 

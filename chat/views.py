@@ -7,9 +7,18 @@ from rest_framework import mixins
 from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.decorators import action
 
-from .models import Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
 from .viewsets import NoUpdateModelViewSet
-from .serializers import (ChatSerializer, CreatePrivateChatSerializer,
+from .models import (Profile,
+                     ProfilePhoto,
+                     PrivateChat,
+                     PrivateChatParticipant,
+                     Chat,
+                     GroupChat,
+                     GroupChatParticipant,
+                     GroupChatAdmin)
+from .serializers import (CreateGroupChatSerializer, GroupChatAdminSerializer, GroupChatParticipantSerializer, GroupChatSerializer,
+                          ChatSerializer,
+                          CreatePrivateChatSerializer,
                           ModifyProfileStatusSerializer,
                           PrivateChatParticipantSerializer,
                           PrivateChatSerializer,
@@ -128,9 +137,12 @@ class PrivateChatViewSet(NoUpdateModelViewSet):
     
 
 class PrivateChatParticipantViewSet(ReadOnlyModelViewSet):
-    queryset = PrivateChatParticipant.objects.all()
     serializer_class = PrivateChatParticipantSerializer
     permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        private_chat_pk = self.kwargs['private_chat_pk']
+        return PrivateChatParticipant.objects.filter(private_chat_id=private_chat_pk)
 
 
 class ChatViewSet(ModelViewSet):
@@ -160,3 +172,55 @@ class ChatViewSet(ModelViewSet):
 
         context['user'] = self.request.user
         return context
+
+
+class GroupChatViewSet(NoUpdateModelViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # from core.models import User
+        # user = User.objects.get(pk=2)
+        user = self.request.user
+        if user.is_staff:
+            return GroupChat.objects.all()
+
+        return user.group_chats.all()
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CreateGroupChatSerializer
+        return GroupChatSerializer
+    
+    def create(self, request, *args, **kwargs):
+        create_serializer = CreateGroupChatSerializer(data=request.data)
+        create_serializer.is_valid(raise_exception=True)
+        group_chat = create_serializer.save()
+
+        return_serializer = GroupChatSerializer(group_chat)
+        return Response(return_serializer.data, status=status.HTTP_201_CREATED)
+    
+
+class GroupChatParticipantViewSet(NoUpdateModelViewSet):
+    serializer_class = GroupChatParticipantSerializer
+
+    def get_queryset(self):
+        group_chat_id = self.kwargs['group_chat_pk']
+        return GroupChatParticipant.objects.filter(group_chat_id=group_chat_id)
+    
+    def get_serializer_context(self):
+        context = {'group_chat_id': self.kwargs['group_chat_pk']}
+        return context
+    
+
+class GroupChatAdminViewSet(ModelViewSet):
+    serializer_class = GroupChatAdminSerializer
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    def get_queryset(self):
+        group_chat_id = self.kwargs['group_chat_pk']
+        return GroupChatAdmin.objects.filter(group_chat_id=group_chat_id)
+    
+    def get_serializer_context(self):
+        context = {'group_chat_id': self.kwargs['group_chat_pk']}
+        return context
+    

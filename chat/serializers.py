@@ -4,7 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from .models import get_user_model, Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
+from .models import GroupChat, GroupChatAdmin, GroupChatParticipant, get_user_model, Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
 
 
 class StrictUpdateModelSerializer(serializers.ModelSerializer):
@@ -205,4 +205,126 @@ class ChatSerializer(StrictUpdateModelSerializer):
             return PrivateChat
         elif parent_chat_type == 'GC':
             return 'GroupChat'
+        
 
+class GroupChatParticipantSerializer(serializers.ModelSerializer):
+    group_chat = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = GroupChatParticipant
+        fields = ['id', 'group_chat', 'user', 'date_joined']
+
+    def create(self, validated_data):
+        group_chat_id = self.context['group_chat_id']
+        user = validated_data['user']
+        group_chat = GroupChat.objects.get(pk=group_chat_id)
+
+        if group_chat.participant_users.filter(id=user.id).exists():
+            raise serializers.ValidationError(
+                'the given user is already a participant in this group chat'
+            )
+
+        participant = GroupChatParticipant.objects.create(
+            group_chat=group_chat,
+            user=validated_data['user']
+        )
+
+        return participant
+
+
+class GroupChatAdminSerializer(StrictUpdateModelSerializer):
+    group_chat = serializers.PrimaryKeyRelatedField(read_only=True)
+    is_creator = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = GroupChatAdmin
+        fields = ['id', 'group_chat', 'user', 'is_active', 'is_creator']
+    
+    class CustomMeta:
+        update_fields = ['is_active']
+
+    def create(self, validated_data):
+        group_chat_id = self.context['group_chat_id']
+        user = validated_data['user']
+        group_chat = GroupChat.objects.get(pk=group_chat_id)
+
+        if group_chat.admin_users.filter(id=user.id).exists():
+            raise serializers.ValidationError(
+                'the given user is already an admin in this group chat'
+            )
+        
+        admin = GroupChatAdmin.objects.create(
+            group_chat=group_chat,
+            user=user
+        )
+
+        return admin
+    
+
+class GroupChatSerializer(serializers.ModelSerializer):
+    participants = GroupChatParticipantSerializer(many=True, read_only=True)
+    admins = GroupChatAdminSerializer(many=True, read_only=True)
+    chats = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+
+    class Meta:
+        model = GroupChat
+        fields = ['id', 'created_at', 'creator', 'participants', 'admins', 'chats']
+
+
+class CreateGroupChatSerializer(serializers.ModelSerializer):
+    participant_user_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        min_length=2,
+        max_length=100
+    )
+
+    class Meta:
+        model = GroupChat
+        fields = ['creator', 'participant_user_ids']
+
+    def validate_participant_user_ids(self, user_ids):
+        unique_ids = set(user_ids)
+        
+        if len(user_ids) != len(unique_ids):
+            raise serializers.ValidationError(
+                'a group chat must have unique paricipants'
+            )
+        
+        user_model = get_user_model()
+
+        queryset = user_model.objects.filter(pk__in=unique_ids)
+        if queryset.count() != len(unique_ids):
+            raise serializers.ValidationError(
+                'id list contains id(s) of non-existent user(s)'
+            )
+
+        return list(unique_ids)
+    
+    def create(self, validated_data):
+        user_ids = validated_data['participant_user_ids']
+        creator = validated_data['creator']
+        
+        try:
+            creator_id = creator.id
+            user_ids.index(creator_id)
+        except ValueError:
+            user_ids.insert(0, creator_id)
+
+        with transaction.atomic():
+            group_chat = GroupChat.objects.create(creator=creator)
+            participants = [
+                GroupChatParticipant(
+                    group_chat=group_chat,
+                    user_id=user_id
+                ) for user_id in user_ids
+            ]
+            GroupChatParticipant.objects.bulk_create(participants)
+
+            GroupChatAdmin.objects.create(
+                group_chat=group_chat,
+                user=creator,
+                is_creator=True
+            )
+
+        return group_chat
