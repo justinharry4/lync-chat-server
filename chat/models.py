@@ -17,11 +17,10 @@ class Profile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     last_seen = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
-    is_photo_removed = models.BooleanField(default=True)
 
 
 class ProfilePhoto(models.Model):
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='photos')
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='photo')
     image = models.ImageField(upload_to='chat/images')
     uploaded_at = models.DateTimeField(auto_now=True)
 

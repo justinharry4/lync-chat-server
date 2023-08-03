@@ -6,7 +6,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from .models import GroupChat, GroupChatAdmin, GroupChatParticipant, get_user_model, Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
-
+from .exceptions import ResourceLocked
 
 class StrictUpdateModelSerializer(serializers.ModelSerializer):
     class CustomMeta:
@@ -56,11 +56,11 @@ class StrictUpdateModelSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
     
-
+# profile photo serializer
 class ProfilePhotoSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProfilePhoto
-        fields = ['id', 'image', 'uploaded_at']
+        fields = ['id', 'image', 'profile', 'uploaded_at']
 
     def create(self, validated_data):
         profile_id = self.context['profile_id']
@@ -68,13 +68,12 @@ class ProfilePhotoSerializer(serializers.ModelSerializer):
 
         return photo
 
-
+# profile serializers
 class ProfileSerializer(serializers.ModelSerializer):
     last_seen = serializers.ReadOnlyField()
     is_online = serializers.ReadOnlyField()
     is_active = serializers.ReadOnlyField()
-    photos = ProfilePhotoSerializer(many=True, read_only=True)
-    # latest_photo = serializers.SerializerMethodField()
+    photo = ProfilePhotoSerializer(read_only=True)
 
     class Meta:
         model = Profile
@@ -84,33 +83,28 @@ class ProfileSerializer(serializers.ModelSerializer):
             'last_seen',
             'is_online',
             'is_active',
-            'photos'
+            'photo'
         ]
-
-    # def get_latest_photo(self, profile):
-    #     sort_key = lambda p: p.uploaded_at
-    #     sorted_photos = sorted(profile.photos.all(), key=sort_key, reverse=True)
-
-    #     if len(sorted_photos) > 0:
-    #         return sorted_photos[0].id
 
 class UpdateProfileSerializer(StrictUpdateModelSerializer):
     class Meta:
         model = Profile
         fields = ['last_seen', 'is_online']
 
-class UpdateStatusProfileSerializer(serializers.ModelSerializer):
+class UpdateStatusProfileSerializer(StrictUpdateModelSerializer):
     class Meta:
         model = Profile
         fields = ['is_active']
 
 
+# private chat participant serializer
 class PrivateChatParticipantSerializer(serializers.ModelSerializer):
     class Meta:
         model = PrivateChatParticipant
         fields = ['id', 'private_chat', 'user']
 
 
+# private chat serializers
 class PrivateChatSerializer(serializers.ModelSerializer):
     participants = PrivateChatParticipantSerializer(many=True)
     chats = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
@@ -118,7 +112,6 @@ class PrivateChatSerializer(serializers.ModelSerializer):
     class Meta:
         model = PrivateChat
         fields = ['id', 'created_at', 'participants', 'chats']
-
 
 class CreatePrivateChatSerializer(serializers.Serializer):
     participant_user_ids = serializers.ListField(
@@ -162,10 +155,12 @@ class CreatePrivateChatSerializer(serializers.Serializer):
         return private_chat
 
 
-class ChatSerializer(StrictUpdateModelSerializer):
+# chat serializers
+class ChatSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    terminated_at = serializers.ReadOnlyField()
     parent_chat_type = serializers.ReadOnlyField()
-    parent_chat = serializers.SerializerMethodField()
+    parent_chat = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Chat
@@ -177,9 +172,6 @@ class ChatSerializer(StrictUpdateModelSerializer):
             'parent_chat_type',
             'parent_chat',
         ]
-
-    class CustomMeta:
-        update_fields = ['terminated_at']
 
     def create(self, validated_data):
         user = self.validate_user(self.context['user'])
@@ -214,11 +206,11 @@ class ChatSerializer(StrictUpdateModelSerializer):
         
         return user
     
-    def get_parent_chat(self, chat):
-        if self.context['parent_chat_type'] == 'PC':
-            parent_chat_serializer = PrivateChatSerializer(chat.parent_chat)
-            return parent_chat_serializer.data
-        else: pass
+    # def get_parent_chat(self, chat):
+    #     if self.context['parent_chat_type'] == 'PC':
+    #         parent_chat_serializer = PrivateChatSerializer(chat.parent_chat)
+    #         return parent_chat_serializer.data
+    #     else: pass
     
     def get_parent_chat_model(self):
         parent_chat_type = self.context['parent_chat_type']
@@ -226,9 +218,21 @@ class ChatSerializer(StrictUpdateModelSerializer):
         if parent_chat_type == 'PC':
             return PrivateChat
         elif parent_chat_type == 'GC':
-            return 'GroupChat'
-        
+            return GroupChat
 
+class UpdateChatSerializer(StrictUpdateModelSerializer):
+    class Meta:
+        model = Chat
+        fields = ['terminated_at']
+
+    def update(self, instance, validated_data):
+        if instance.terminated_at is not None:
+            raise ResourceLocked('terminated_at field cannot be updated')
+
+        return super().update(instance, validated_data)
+
+
+# group chat participant serializer
 class GroupChatParticipantSerializer(serializers.ModelSerializer):
     group_chat = serializers.PrimaryKeyRelatedField(read_only=True)
 
@@ -254,16 +258,15 @@ class GroupChatParticipantSerializer(serializers.ModelSerializer):
         return participant
 
 
+# group chat admin serilaizers
 class GroupChatAdminSerializer(serializers.ModelSerializer):
     group_chat = serializers.PrimaryKeyRelatedField(read_only=True)
-    is_creator = serializers.BooleanField(read_only=True)
+    is_active = serializers.ReadOnlyField()
+    is_creator = serializers.ReadOnlyField()
     
     class Meta:
         model = GroupChatAdmin
         fields = ['id', 'group_chat', 'user', 'is_active', 'is_creator']
-    
-    class CustomMeta:
-        update_fields = ['is_active']
 
     def create(self, validated_data):
         group_chat_id = self.context['group_chat_id']
@@ -282,7 +285,13 @@ class GroupChatAdminSerializer(serializers.ModelSerializer):
 
         return admin
     
+class UpdateGroupChatAdminSerializer(StrictUpdateModelSerializer):
+    class Meta:
+        model = GroupChatAdmin
+        fields = ['is_active']
 
+    
+# group chat serializers
 class GroupChatSerializer(serializers.ModelSerializer):
     participants = GroupChatParticipantSerializer(many=True, read_only=True)
     admins = GroupChatAdminSerializer(many=True, read_only=True)
