@@ -16,7 +16,7 @@ from .models import (
 )
 from .serializers import (
     CreateGroupChatSerializer, GroupChatAdminSerializer, GroupChatParticipantSerializer,
-    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, UpdateChatSerializer, UpdateGroupChatAdminSerializer,
+    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, UpdateChatSerializer, UpdateGroupChatAdminSerializer, UpdateProfileSerializer,
     UpdateStatusProfileSerializer, PrivateChatParticipantSerializer, PrivateChatSerializer,
     ProfilePhotoSerializer, ProfileSerializer
 )
@@ -26,14 +26,14 @@ from . import serializers as ser
 class ProfileViewSet(CustomWriteModelViewSet):
     queryset = Profile.objects.prefetch_related('photo').all()
     http_method_names = ['get', 'post', 'patch', 'delete']
-    retrieve_serializer_class = ser.ProfileSerializer
+    retrieve_serializer_class = ProfileSerializer
 
     def get_serializer_class(self):
         if self.action == 'partial_update':
-            return ser.UpdateProfileSerializer
+            return UpdateProfileSerializer
         elif self.action == 'update_active_status':
-            return ser.UpdateStatusProfileSerializer
-        return ser.ProfileSerializer
+            return UpdateStatusProfileSerializer
+        return ProfileSerializer
 
     def get_permissions(self):
         if self.action in ['list', 'destroy', 'update_active_status']:
@@ -48,7 +48,7 @@ class ProfileViewSet(CustomWriteModelViewSet):
         serializer.is_valid(raise_exception=True)
         mod_profile = serializer.save()
 
-        ret_serializer = ser.ProfileSerializer(mod_profile)
+        ret_serializer = ProfileSerializer(mod_profile)
         return Response(ret_serializer.data, status=status.HTTP_200_OK)
     
 
@@ -82,6 +82,8 @@ class ProfilePhotoViewSet(NoUpdateModelViewSet):
 class PrivateChatViewSet(CustomWriteNoUpdateModelViewSet):
     permission_classes = [IsAuthenticated]
     retrieve_serializer_class = PrivateChatSerializer
+    # print(PrivateChat.objects.filter(participant_users_tag__contains='1'))
+    # print(PrivateChat.objects.get(pk=11).get_participants_tag())
 
     def get_queryset(self):
         # from core.models import User

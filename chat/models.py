@@ -40,7 +40,7 @@ class Chat(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     parent_chat = GenericForeignKey()
-    
+
 
 class PrivateChat(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -50,6 +50,23 @@ class PrivateChat(models.Model):
         through='PrivateChatParticipant',
         related_name='private_chats'
     )
+    participant_users_tag = models.CharField(max_length=100, null=True)
+
+    @classmethod
+    def generate_participants_tag(cls, user_ids):
+        str_ids = [str(user_id) for user_id in user_ids]
+
+        return ' '.join(str_ids)
+    
+    def save(self, force_insert=False, force_update=False, using =None, update_fields=None):
+        if self.id and self.participant_users.count() > 0:
+            users = self.participant_users.all().order_by('id')
+            user_ids = [user.id for user in users]
+            tag = PrivateChat.generate_participants_tag(user_ids)
+
+            self.participant_users_tag = tag
+
+        return super().save(force_insert, force_update, using, update_fields)
 
 
 class PrivateChatParticipant(models.Model):

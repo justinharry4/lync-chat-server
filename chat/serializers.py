@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.db.models import Field
+from django.core.exceptions import ObjectDoesNotExist
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
@@ -9,24 +10,6 @@ from .models import GroupChat, GroupChatAdmin, GroupChatParticipant, get_user_mo
 from .exceptions import ResourceLocked
 
 class StrictUpdateModelSerializer(serializers.ModelSerializer):
-    class CustomMeta:
-        pass
-    
-    def get_update_fields(self):
-        try:
-            fields = self.CustomMeta.update_fields
-            if not len(fields) > 0:
-                raise ValueError(
-                    'CustomMeta.update_fields must be a non-empty list'
-                )
-        except AttributeError:
-            raise ValueError(
-                'update_fields attribute on CustomMeta must be provided '
-                'as a non-empty list.'
-            )
-        
-        return fields
-    
     def is_model_field(self, field):
         model = self.Meta.model
         field_names = [f.name for f in model._meta.get_fields() if f.name != 'id']
@@ -58,15 +41,20 @@ class StrictUpdateModelSerializer(serializers.ModelSerializer):
     
 # profile photo serializer
 class ProfilePhotoSerializer(serializers.ModelSerializer):
+    profile = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = ProfilePhoto
         fields = ['id', 'image', 'profile', 'uploaded_at']
 
     def create(self, validated_data):
         profile_id = self.context['profile_id']
-        photo = ProfilePhoto.objects.create(profile_id=profile_id, **validated_data)
 
-        return photo
+        profile = Profile.objects.get(pk=profile_id)
+        if hasattr(profile, 'photo'):
+            profile.photo.delete()
+
+        return ProfilePhoto.objects.create(profile_id=profile_id, **validated_data)
 
 # profile serializers
 class ProfileSerializer(serializers.ModelSerializer):
@@ -137,20 +125,29 @@ class CreatePrivateChatSerializer(serializers.Serializer):
                     f'a user with id `{user_id}` was not found.'
                 )
         
-        return user_ids
+        return sorted(user_ids)
     
     def create(self, validated_data):
+        user_ids = validated_data['participant_user_ids']
+        users_tag = PrivateChat.generate_participants_tag(user_ids)
+
         with transaction.atomic():
-            print(validated_data)
-            user_ids = validated_data['participant_user_ids']
+            if PrivateChat.objects.filter(participant_users_tag=users_tag).exists():
+                raise serializers.ValidationError(
+                    'a private chat with the given participants already exists'
+                )
 
             private_chat = PrivateChat.objects.create()
             
-            for user_id in user_ids:
-                PrivateChatParticipant.objects.create(
+            participants = [
+                PrivateChatParticipant(
                     private_chat=private_chat,
                     user_id=user_id
-                )
+                ) for user_id in user_ids
+            ]
+            PrivateChatParticipant.objects.bulk_create(participants)
+
+            private_chat.save()
 
         return private_chat
 
@@ -205,12 +202,6 @@ class ChatSerializer(serializers.ModelSerializer):
             )
         
         return user
-    
-    # def get_parent_chat(self, chat):
-    #     if self.context['parent_chat_type'] == 'PC':
-    #         parent_chat_serializer = PrivateChatSerializer(chat.parent_chat)
-    #         return parent_chat_serializer.data
-    #     else: pass
     
     def get_parent_chat_model(self):
         parent_chat_type = self.context['parent_chat_type']

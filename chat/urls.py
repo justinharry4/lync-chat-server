@@ -19,7 +19,7 @@ profiles_router = NestedDefaultRouter(
     lookup='profile'
 )
 profiles_router.register(
-    'photos',
+    'photo',
     ProfilePhotoViewSet,
     basename='profile-photos'
 )

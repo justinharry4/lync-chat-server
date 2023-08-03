@@ -11,10 +11,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # migrations.RemoveField(
-        #     model_name='profile',
-        #     name='is_photo_removed',
-        # ),
+        migrations.RemoveField(
+            model_name='profile',
+            name='is_photo_removed',
+        ),
         migrations.AlterField(
             model_name='groupchatadmin',
             name='is_creator',
