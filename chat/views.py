@@ -2,10 +2,11 @@ from django.shortcuts import get_object_or_404
 from django.conf import settings
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
+from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework import mixins
 from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
 
 from .viewsets import (
     CustomWriteModelViewSet, CustomWriteNoUpdateModelViewSet, NoUpdateModelViewSet
@@ -16,11 +17,23 @@ from .models import (
 )
 from .serializers import (
     CreateGroupChatSerializer, GroupChatAdminSerializer, GroupChatParticipantSerializer,
-    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, UpdateChatSerializer, UpdateGroupChatAdminSerializer, UpdateProfileSerializer,
-    UpdateStatusProfileSerializer, PrivateChatParticipantSerializer, PrivateChatSerializer,
-    ProfilePhotoSerializer, ProfileSerializer
+    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, UpdateChatSerializer,
+    UpdateGroupChatAdminSerializer, UpdateProfileSerializer, UpdateStatusProfileSerializer,
+    PrivateChatParticipantSerializer, PrivateChatSerializer, ProfilePhotoSerializer,
+    ProfileSerializer
 )
-from . import serializers as ser
+
+
+def check_parent_existence(parent_model, parent_id_key, kwargs):
+    parent_id = kwargs.get(parent_id_key)
+
+    try:
+        parent_model.objects.get(pk=parent_id)
+    except parent_model.DoesNotExist:
+        raise NotFound(
+            f'parent {parent_model.__name__} with id `{parent_id}` '
+            'was not found'
+        )
 
 
 class ProfileViewSet(CustomWriteModelViewSet):
@@ -50,30 +63,21 @@ class ProfileViewSet(CustomWriteModelViewSet):
 
         ret_serializer = ProfileSerializer(mod_profile)
         return Response(ret_serializer.data, status=status.HTTP_200_OK)
-    
-
 
 
 class ProfilePhotoViewSet(NoUpdateModelViewSet):
     serializer_class = ProfilePhotoSerializer
+    
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+
+        check_parent_existence(Profile, 'profile_pk', kwargs)
+
 
     def get_queryset(self):
+        # raise NotFound("something doesn't exist")
         profile_id = self.kwargs['profile_pk']
         return ProfilePhoto.objects.filter(profile_id=profile_id)
-    
-    # def get_permissions(self):
-        # if self.action in ['list']:
-        #     return [IsAdminUser()]
-        # elif self.action == 'retrieve':
-        #     photo_id = self.kwargs['pk']
-        #     latest_photo = self.get_latest_photo()
-
-        #     if latest_photo and str(latest_photo.id) != photo_id:
-        #         return [IsAdminUser()]
-        #     else:
-        #         return [AllowAny()]
-        # else:
-        #     return [AllowAny()]
         
     def get_serializer_context(self):
         return {'profile_id': self.kwargs['profile_pk']}
@@ -82,8 +86,6 @@ class ProfilePhotoViewSet(NoUpdateModelViewSet):
 class PrivateChatViewSet(CustomWriteNoUpdateModelViewSet):
     permission_classes = [IsAuthenticated]
     retrieve_serializer_class = PrivateChatSerializer
-    # print(PrivateChat.objects.filter(participant_users_tag__contains='1'))
-    # print(PrivateChat.objects.get(pk=11).get_participants_tag())
 
     def get_queryset(self):
         # from core.models import User
@@ -104,6 +106,11 @@ class PrivateChatParticipantViewSet(ReadOnlyModelViewSet):
     serializer_class = PrivateChatParticipantSerializer
     permission_classes = [IsAdminUser]
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+
+        check_parent_existence(PrivateChat, 'private_chat_pk', kwargs)
+
     def get_queryset(self):
         private_chat_pk = self.kwargs['private_chat_pk']
         return PrivateChatParticipant.objects.filter(private_chat_id=private_chat_pk)
@@ -113,10 +120,21 @@ class ChatViewSet(CustomWriteModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete']
     retrieve_serializer_class = ChatSerializer
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+
+        self.set_parent_chat_info()
+
+        parent_info = self.parent_chat_info
+        parent_model = parent_info['parent_model']
+        parent_id_key = parent_info['parent_id_key']
+
+        check_parent_existence(parent_model, parent_id_key, kwargs)
+
     def get_queryset(self):
-        ser_context = self.get_serializer_context()
-        parent_type = ser_context['parent_chat_type']
-        parent_chat_pk = ser_context['parent_chat_id']
+        parent_info = self.parent_chat_info
+        parent_type = parent_info['parent_chat_type']
+        parent_chat_pk = parent_info['parent_chat_id']
         
         return Chat.objects.filter(
             object_id=parent_chat_pk,
@@ -128,20 +146,30 @@ class ChatViewSet(CustomWriteModelViewSet):
             return UpdateChatSerializer
         return ChatSerializer
 
-    def get_serializer_context(self):
-        if self.kwargs.get('private_chat_pk'):
-            context = {
-                'parent_chat_type': 'PC',
-                'parent_chat_id': self.kwargs['private_chat_pk']
-            }
-        elif self.kwargs.get('group_chat_pk'):
-            context = {
-                'parent_chat_type': 'GC',
-                'parent_chat_id': self.kwargs['group_chat_pk']
-            }
+    def set_parent_chat_info(self):
+        prop_names = ('parent_model', 'parent_chat_type', 'parent_id_key')
+        pc_props = (PrivateChat, 'PC', 'private_chat_pk')
+        gc_props = (GroupChat, 'GC', 'group_chat_pk')
 
-        context['user'] = self.request.user
-        return context
+        key_idx = 2
+
+        pc_id = self.kwargs.get(pc_props[key_idx])
+        gc_id = self.kwargs.get(gc_props[key_idx])
+        if pc_id:
+            props = pc_props
+        elif gc_id:
+            props = gc_props
+
+        info_dict = {}
+        for idx, name in enumerate(prop_names):
+            info_dict[name] = props[idx]
+
+        info_dict['parent_chat_id'] = pc_id or gc_id
+        
+        self.parent_chat_info = info_dict
+
+    def get_serializer_context(self):
+        return {'user': self.request.user, **self.parent_chat_info}
 
 
 class GroupChatViewSet(CustomWriteNoUpdateModelViewSet):
@@ -166,6 +194,11 @@ class GroupChatViewSet(CustomWriteNoUpdateModelViewSet):
 class GroupChatParticipantViewSet(NoUpdateModelViewSet):
     serializer_class = GroupChatParticipantSerializer
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+
+        check_parent_existence(GroupChat, 'group_chat_pk', kwargs)
+
     def get_queryset(self):
         group_chat_id = self.kwargs['group_chat_pk']
         return GroupChatParticipant.objects.filter(group_chat_id=group_chat_id)
@@ -178,6 +211,11 @@ class GroupChatParticipantViewSet(NoUpdateModelViewSet):
 class GroupChatAdminViewSet(CustomWriteModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete']
     retrieve_serializer_class = GroupChatAdminSerializer
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+
+        check_parent_existence(GroupChat, 'group_chat_pk', kwargs)
 
     def get_queryset(self):
         group_chat_id = self.kwargs['group_chat_pk']
