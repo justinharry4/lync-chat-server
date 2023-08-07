@@ -1,15 +1,17 @@
 from django.shortcuts import get_object_or_404
 from django.conf import settings
+
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework import mixins
 from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 
+from .permissions import IsPrivateChatMember
 from .viewsets import (
-    CustomWriteModelViewSet, CustomWriteNoUpdateModelViewSet, NoUpdateModelViewSet
+    ReadOnlyModelViewSet, NoUpdateModelViewSet, CustomWriteModelViewSet, 
+    CustomWriteNoUpdateModelViewSet
 )
 from .models import (
     Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat, GroupChat,
@@ -24,6 +26,7 @@ from .serializers import (
 )
 
 
+
 def check_parent_existence(parent_model, parent_id_key, kwargs):
     parent_id = kwargs.get(parent_id_key)
 
@@ -31,8 +34,7 @@ def check_parent_existence(parent_model, parent_id_key, kwargs):
         parent_model.objects.get(pk=parent_id)
     except parent_model.DoesNotExist:
         raise NotFound(
-            f'parent {parent_model.__name__} with id `{parent_id}` '
-            'was not found'
+            f'parent {parent_model.__name__} with id `{parent_id}` was not found'
         )
 
 
@@ -73,9 +75,7 @@ class ProfilePhotoViewSet(NoUpdateModelViewSet):
 
         check_parent_existence(Profile, 'profile_pk', kwargs)
 
-
     def get_queryset(self):
-        # raise NotFound("something doesn't exist")
         profile_id = self.kwargs['profile_pk']
         return ProfilePhoto.objects.filter(profile_id=profile_id)
         
@@ -84,17 +84,21 @@ class ProfilePhotoViewSet(NoUpdateModelViewSet):
 
 
 class PrivateChatViewSet(CustomWriteNoUpdateModelViewSet):
-    permission_classes = [IsAuthenticated]
     retrieve_serializer_class = PrivateChatSerializer
 
-    def get_queryset(self):
-        # from core.models import User
-        # user = User.objects.get(pk=2)
-        user = self.request.user
-        if user.is_staff:             # private chat list should be private to users
-            return PrivateChat.objects.all()
+    def get_permissions(self):
+        if self.action == 'retrieve':
+            id = self.kwargs['pk']
+            perms = [IsPrivateChatMember(id)]
+        elif self.action == 'delete':
+            perms = [IsAdminUser()]
+        else:
+            perms = [IsAuthenticated()]
 
-        return user.private_chats.all()
+        return perms
+
+    def get_queryset(self):
+        return self.request.user.private_chats.all()
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -104,12 +108,14 @@ class PrivateChatViewSet(CustomWriteNoUpdateModelViewSet):
 
 class PrivateChatParticipantViewSet(ReadOnlyModelViewSet):
     serializer_class = PrivateChatParticipantSerializer
-    permission_classes = [IsAdminUser]
+    child = True
+    parent_model = PrivateChat
+    parent_url_lookup = 'private_chat_pk'
 
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
-
-        check_parent_existence(PrivateChat, 'private_chat_pk', kwargs)
+    def get_permissions(self):
+        private_chat_id = self.kwargs['private_chat_pk']
+        
+        return [IsPrivateChatMember(private_chat_id)]
 
     def get_queryset(self):
         private_chat_pk = self.kwargs['private_chat_pk']

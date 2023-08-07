@@ -1,12 +1,14 @@
 from django.db import transaction
-from django.db.models import Field
-from django.core.exceptions import ObjectDoesNotExist
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from .models import GroupChat, GroupChatAdmin, GroupChatParticipant, get_user_model, Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat
+from .models import (
+    GroupChat, GroupChatAdmin, GroupChatParticipant, Profile, ProfilePhoto,
+    PrivateChat, PrivateChatParticipant, Chat, get_user_model
+)
 from .exceptions import ResourceLocked
 
 class StrictUpdateModelSerializer(serializers.ModelSerializer):
