@@ -266,6 +266,11 @@ class GroupChatAdminSerializer(serializers.ModelSerializer):
         user = validated_data['user']
         group_chat = GroupChat.objects.get(pk=group_chat_id)
 
+        if not group_chat.participant_users.filter(id=user.id).exists():
+            raise serializers.ValidationError(
+                'the given user is not a participant in this group chat'
+            )
+
         if group_chat.admin_users.filter(id=user.id).exists():
             raise serializers.ValidationError(
                 'the given user is already an admin in this group chat'

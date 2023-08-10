@@ -8,7 +8,10 @@ from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 
-from .permissions import IsPrivateChatMember
+from .permissions import (
+    IsAssociatedUser, IsGroupChatAdmin, IsGroupChatCreator, IsGroupChatMember, IsPrivateChatMember,
+    one_of, all_of
+)
 from .viewsets import (
     ReadOnlyModelViewSet, NoUpdateModelViewSet, CustomWriteModelViewSet, 
     CustomWriteNoUpdateModelViewSet
@@ -90,7 +93,7 @@ class PrivateChatViewSet(CustomWriteNoUpdateModelViewSet):
         if self.action == 'retrieve':
             id = self.kwargs['pk']
             perms = [IsPrivateChatMember(id)]
-        elif self.action == 'delete':
+        elif self.action == 'destroy':
             perms = [IsAdminUser()]
         else:
             perms = [IsAuthenticated()]
@@ -113,12 +116,11 @@ class PrivateChatParticipantViewSet(ReadOnlyModelViewSet):
     parent_url_lookup = 'private_chat_pk'
 
     def get_permissions(self):
-        private_chat_id = self.kwargs['private_chat_pk']
-        
+        private_chat_id = self.kwargs[self.parent_url_lookup]
         return [IsPrivateChatMember(private_chat_id)]
 
     def get_queryset(self):
-        private_chat_pk = self.kwargs['private_chat_pk']
+        private_chat_pk = self.kwargs[self.parent_url_lookup]
         return PrivateChatParticipant.objects.filter(private_chat_id=private_chat_pk)
 
 
@@ -179,17 +181,21 @@ class ChatViewSet(CustomWriteModelViewSet):
 
 
 class GroupChatViewSet(CustomWriteNoUpdateModelViewSet):
-    permission_classes = [IsAuthenticated]
     retrieve_serializer_class = GroupChatSerializer
 
-    def get_queryset(self):
-        # from core.models import User
-        # user = User.objects.get(pk=2)
-        user = self.request.user            # group chat list should be private to users
-        if user.is_staff:
-            return GroupChat.objects.all()
+    def get_permissions(self):
+        if self.action == 'retrieve':
+            group_chat_id = self.kwargs['pk']
+            perms = [IsGroupChatMember(group_chat_id)]
+        elif self.action == 'destroy':
+            perms = [IsAdminUser()]
+        else:
+            perms = [IsAuthenticated()]
+        
+        return perms
 
-        return user.group_chats.all()
+    def get_queryset(self):   
+        return self.request.user.group_chats.all()
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -199,29 +205,55 @@ class GroupChatViewSet(CustomWriteNoUpdateModelViewSet):
 
 class GroupChatParticipantViewSet(NoUpdateModelViewSet):
     serializer_class = GroupChatParticipantSerializer
+    child = True
+    parent_model = GroupChat
+    parent_url_lookup = 'group_chat_pk'
 
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
+    def get_permissions(self):
+        group_chat_id = self.kwargs[self.parent_url_lookup]
 
-        check_parent_existence(GroupChat, 'group_chat_pk', kwargs)
+        if self.action == 'create':
+            perms = [IsGroupChatAdmin(group_chat_id)]
+        elif self.action == 'destroy':
+            is_participant_user = all_of(
+                IsGroupChatMember(group_chat_id),
+                IsAssociatedUser(GroupChatParticipant, self.kwargs['pk'])
+            )
+
+            perms = [
+                one_of(is_participant_user,
+                       IsGroupChatAdmin(group_chat_id))
+            ]
+        else:
+            perms = [IsGroupChatMember(group_chat_id)]
+
+        return perms
 
     def get_queryset(self):
-        group_chat_id = self.kwargs['group_chat_pk']
+        group_chat_id = self.kwargs[self.parent_url_lookup]
         return GroupChatParticipant.objects.filter(group_chat_id=group_chat_id)
     
     def get_serializer_context(self):
-        context = {'group_chat_id': self.kwargs['group_chat_pk']}
+        context = {'group_chat_id': self.kwargs[self.parent_url_lookup]}
         return context
     
 
 class GroupChatAdminViewSet(CustomWriteModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete']
     retrieve_serializer_class = GroupChatAdminSerializer
+    child = True
+    parent_model = GroupChat
+    parent_url_lookup = 'group_chat_pk'
 
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
+    def get_permissions(self):
+        group_chat_id = self.kwargs[self.parent_url_lookup]
 
-        check_parent_existence(GroupChat, 'group_chat_pk', kwargs)
+        if self.action in ['list', 'retrieve']:
+            perms = [IsGroupChatMember(group_chat_id)]
+        else:
+            perms = [IsGroupChatCreator(group_chat_id)]
+
+        return perms
 
     def get_queryset(self):
         group_chat_id = self.kwargs['group_chat_pk']
