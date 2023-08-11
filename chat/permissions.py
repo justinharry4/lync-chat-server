@@ -14,42 +14,45 @@ def silence_not_found_error(view, model, pk):
     view.missing_objects.append((model, pk))
 
 
-def one_of(*args):
-    class CompositeOrPermission(CustomBasePermission):
-        perms = args
-
-        def has_permission(self, request, view):
-            for perm in self.perms:
-                if perm.has_permission(request, view):
-                    return True
-
-            return False
-
-    return CompositeOrPermission()
-
-def all_of(*args):
-    class CompositeAndPermission(CustomBasePermission):
-        perms = args
-
-        def has_permission(self, request, view):
-            for perm in self.perms:
-                if not perm.has_permission(request, view):
-                    return False
-                
-            return True
-        
-    return CompositeAndPermission()
-
-
 class CustomBasePermission(permissions.BasePermission):
     def is_authenticated(self, request):
         return request.user and request.user.is_authenticated
+    
+    def __or__(self, other_perm):
+        return OrPermission(self, other_perm)
+    
+    def __and__(self, other_perm):
+        return AndPermission(self, other_perm)
+    
+
+class OrPermission(CustomBasePermission):
+    def __init__(self, perm1, perm2):
+        self.perm1 = perm1
+        self.perm2 = perm2
+
+    def has_permission(self, request, view):
+        return (
+            self.perm1.has_permission(request, view) or
+            self.perm2.has_permission(request, view)
+        )
+    
+
+class AndPermission(CustomBasePermission):
+    def __init__(self, perm1, perm2):
+        self.perm1 = perm1
+        self.perm2 = perm2
+
+    def has_permission(self, request, view):
+        return (
+            self.perm1.has_permission(request, view) and
+            self.perm2.has_permission(request, view)
+        )
 
 
 class IsPrivateChatMember(CustomBasePermission):
     message = 'user is not a participant in the referenced private chat'
 
-    def __init__(self, private_chat_id=None):
+    def __init__(self, private_chat_id):
         self.id = private_chat_id
 
     def has_permission(self, request, view):
@@ -125,16 +128,22 @@ class IsGroupChatCreator(CustomBasePermission):
 
 
 class IsAssociatedUser(CustomBasePermission):
-    def __init__(self, model, id, user_field='user'):
+    def __init__(self, object_id, model=None, user_field='user'):
+        self.id = object_id
         self.model = model
-        self.id = id
         self.user_field = user_field
-        self.message = f'user is not associated with the referenced {model.__name__}'
 
-    def has_permission(self, request, view):
+    def has_permission(self, request, view):        
         if not self.is_authenticated(request):
             return False
         
+        if not self.model:
+            self.model = view.get_queryset().model
+
+        self.message = (
+            f'user is not associated with the referenced {self.model.__name__}'
+        )
+
         id = self.id
         model = self.model
         user_field = self.user_field
@@ -156,4 +165,3 @@ class IsAssociatedUser(CustomBasePermission):
     
         return instance_user == request.user
 
-    

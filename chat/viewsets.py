@@ -24,20 +24,30 @@ class CustomGenericViewSet(GenericViewSet):
         if self.child:
             self.check_parent_existence()
 
+    def get_parent_model(self):
+        return self.parent_model
+    
+    def get_parent_url_lookup(self):
+        return self.parent_url_lookup
+
     def get_retrieve_serializer(self, *args, **kwargs):
         if self.retrieve_serializer_class:
             return self.retrieve_serializer_class(*args, **kwargs)
         return self.get_serializer_class()(*args, **kwargs)
     
     def check_parent_existence(self):
-        assert self.parent_model and self.parent_url_lookup, (
-            '`.parent_model` and `.parent_url_lookup` attributes must '
-            'be set on child viewsets where `.child` is set to `True`'
+        parent_model = self.get_parent_model()
+        parent_url_lookup = self.get_parent_url_lookup()
+
+        assert parent_model and parent_url_lookup, (
+            '`.parent_model` and `.parent_url_lookup` attributes or '
+            'the corresponding methods `.get_parent_model()` and '
+            '`.get_parent_url_lookup()` must be set on child viewsets '
+            'where `.child` is set to `True`'
         )
 
-        parent_model = self.parent_model
-        parent_id = self.kwargs[self.parent_url_lookup]
-
+        parent_id = self.kwargs[parent_url_lookup]
+        
         parent_object = (parent_model, str(parent_id))
         missing_objects = getattr(self, 'missing_objects', [])
         missing_parents = [(model, str(pk)) for model, pk in missing_objects
