@@ -14,11 +14,12 @@ from .exceptions import ResourceLocked
 class StrictUpdateModelSerializer(serializers.ModelSerializer):
     def is_model_field(self, field):
         model = self.Meta.model
-        field_names = [f.name for f in model._meta.get_fields() if f.name != 'id']
+        field_names = [
+            f.name for f in model._meta.get_fields() if f.name != 'id'
+        ]
 
         return field in field_names
-        
-
+    
     def check_allowed_fields(self):
         errors = {}
         for field in self.initial_data:
@@ -96,7 +97,7 @@ class PrivateChatParticipantSerializer(serializers.ModelSerializer):
 
 # private chat serializers
 class PrivateChatSerializer(serializers.ModelSerializer):
-    participants = PrivateChatParticipantSerializer(many=True)
+    participants = PrivateChatParticipantSerializer(many=True, read_only=True)
     chats = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     class Meta:
@@ -107,25 +108,34 @@ class CreatePrivateChatSerializer(serializers.Serializer):
     participant_user_ids = serializers.ListField(
         child=serializers.IntegerField(),
         allow_empty=False,
-        min_length=2,
+        min_length=1,
         max_length=2
     )
 
     def validate_participant_user_ids(self, user_ids):
-        id1, id2 = user_ids
+        current_user = self.context['user']
 
-        if id1 == id2:
+        if len(user_ids) == 1:
+            user_ids.append(current_user.id)
+
+        if user_ids[0] == user_ids[1]:
             raise serializers.ValidationError(
                 'a private chat must have 2 different participants.'
             )
         
+        if current_user.id not in user_ids:
+            raise serializers.ValidationError(
+                'current user must be included as one of the '
+                'participants for a two-item list'
+            )
+        
         user_model = get_user_model()
+        other_id, = [id for id in user_ids if id != current_user.id]
 
-        for user_id in user_ids:
-            if not user_model.objects.filter(pk=user_id).exists():
-                raise serializers.ValidationError(
-                    f'a user with id `{user_id}` was not found.'
-                )
+        if not user_model.objects.filter(pk=other_id).exists():
+            raise serializers.ValidationError(
+                f'a user with id `{other_id}` was not found.'
+            )
         
         return sorted(user_ids)
     
@@ -173,16 +183,10 @@ class ChatSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        user = self.validate_user(self.context['user'])
-
+        user = self.context['user']
+        model = self.context['parent_chat_model']
         parent_chat_id = self.context['parent_chat_id']
-        model = self.get_parent_chat_model()
         content_type = ContentType.objects.get_for_model(model)
-
-        if not model.objects.filter(pk=parent_chat_id).exists():
-            raise serializers.ValidationError(
-                f'A {model.__name__} object with id `{parent_chat_id}` does not exist'
-            )
 
         return Chat.objects.create(
             user=user,
@@ -191,27 +195,7 @@ class ChatSerializer(serializers.ModelSerializer):
             object_id=parent_chat_id,
             **validated_data
         )
-
-    def validate_user(self, user):
-        parent_model = self.get_parent_chat_model()
-        parent_chat_id = self.context['parent_chat_id']
-        parent_chat = parent_model.objects.get(pk=parent_chat_id)
-
-        if not parent_chat.participant_users.filter(pk=user.id).exists():
-            raise serializers.ValidationError(
-                f'{parent_model.__name__} object with id `{parent_chat_id}` '
-                f'does not have the current user as one of its participants'
-            )
-        
-        return user
     
-    def get_parent_chat_model(self):
-        parent_chat_type = self.context['parent_chat_type']
-
-        if parent_chat_type == 'PC':
-            return PrivateChat
-        elif parent_chat_type == 'GC':
-            return GroupChat
 
 class UpdateChatSerializer(StrictUpdateModelSerializer):
     class Meta:
@@ -220,7 +204,9 @@ class UpdateChatSerializer(StrictUpdateModelSerializer):
 
     def update(self, instance, validated_data):
         if instance.terminated_at is not None:
-            raise ResourceLocked('terminated_at field cannot be updated')
+            raise ResourceLocked(
+                '`terminated_at` field can only be updated once'
+            )
 
         return super().update(instance, validated_data)
 
@@ -234,8 +220,8 @@ class GroupChatParticipantSerializer(serializers.ModelSerializer):
         fields = ['id', 'group_chat', 'user', 'date_joined']
 
     def create(self, validated_data):
-        group_chat_id = self.context['group_chat_id']
         user = validated_data['user']
+        group_chat_id = self.context['group_chat_id']
         group_chat = GroupChat.objects.get(pk=group_chat_id)
 
         if group_chat.participant_users.filter(id=user.id).exists():
@@ -245,7 +231,7 @@ class GroupChatParticipantSerializer(serializers.ModelSerializer):
 
         participant = GroupChatParticipant.objects.create(
             group_chat=group_chat,
-            user=validated_data['user']
+            user=user
         )
 
         return participant
@@ -262,8 +248,8 @@ class GroupChatAdminSerializer(serializers.ModelSerializer):
         fields = ['id', 'group_chat', 'user', 'is_active', 'is_creator']
 
     def create(self, validated_data):
-        group_chat_id = self.context['group_chat_id']
         user = validated_data['user']
+        group_chat_id = self.context['group_chat_id']
         group_chat = GroupChat.objects.get(pk=group_chat_id)
 
         if not group_chat.participant_users.filter(id=user.id).exists():
@@ -300,17 +286,13 @@ class GroupChatSerializer(serializers.ModelSerializer):
         fields = ['id', 'created_at', 'creator', 'participants', 'admins', 'chats']
 
 
-class CreateGroupChatSerializer(serializers.ModelSerializer):
+class CreateGroupChatSerializer(serializers.Serializer):
     participant_user_ids = serializers.ListField(
         child=serializers.IntegerField(),
         allow_empty=False,
         min_length=2,
         max_length=100
     )
-
-    class Meta:
-        model = GroupChat
-        fields = ['creator', 'participant_user_ids']
 
     def validate_participant_user_ids(self, user_ids):
         unique_ids = set(user_ids)
@@ -331,14 +313,13 @@ class CreateGroupChatSerializer(serializers.ModelSerializer):
         return list(unique_ids)
     
     def create(self, validated_data):
+        creator = self.context['user']
         user_ids = validated_data['participant_user_ids']
-        creator = validated_data['creator']
         
         try:
-            creator_id = creator.id
-            user_ids.index(creator_id)
+            user_ids.index(creator.id)
         except ValueError:
-            user_ids.insert(0, creator_id)
+            user_ids.insert(0, creator.id)
 
         with transaction.atomic():
             group_chat = GroupChat.objects.create(creator=creator)

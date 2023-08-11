@@ -4,8 +4,8 @@ from rest_framework_nested.routers import DefaultRouter, NestedDefaultRouter
 
 from .views import (
     GroupChatAdminViewSet, GroupChatParticipantViewSet, ProfilePhotoViewSet,
-    ProfileViewSet, ChatViewSet, PrivateChatViewSet, PrivateChatParticipantViewSet,
-    GroupChatViewSet
+    ProfileViewSet, PrivateChatViewSet, PrivateChatParticipantViewSet,
+    GroupChatViewSet, PCChatViewSet, GCChatViewSet
 )
 
 
@@ -23,14 +23,14 @@ private_chat_router = NestedDefaultRouter(base_router, 'privatechats',
                                           lookup='private_chat')
 private_chat_router.register('participants', PrivateChatParticipantViewSet,
                              basename='privatechat-participants')
-private_chat_router.register('chats', ChatViewSet,
+private_chat_router.register('chats', PCChatViewSet,
                              basename='private-childchats')
 
 group_chat_router = NestedDefaultRouter(base_router, 'groupchats',
                                         lookup='group_chat')
 group_chat_router.register('participants', GroupChatParticipantViewSet,
                            basename='groupchat-participants')
-group_chat_router.register('chats', ChatViewSet,
+group_chat_router.register('chats', GCChatViewSet,
                            basename='group-childchats')
 group_chat_router.register('admins', GroupChatAdminViewSet,
                            basename='groupchat-admins')
