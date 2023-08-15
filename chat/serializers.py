@@ -6,7 +6,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from .models import (
-    GroupChat, GroupChatAdmin, GroupChatParticipant, Profile, ProfilePhoto,
+    GroupChat, GroupChatAdmin, GroupChatParticipant, Message, Profile, ProfilePhoto,
     PrivateChat, PrivateChatParticipant, Chat, get_user_model
 )
 from .exceptions import ResourceLocked
@@ -169,7 +169,7 @@ class ChatSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(read_only=True)
     terminated_at = serializers.ReadOnlyField()
     parent_chat_type = serializers.ReadOnlyField()
-    parent_chat = serializers.PrimaryKeyRelatedField(read_only=True)
+    parent_id = serializers.ReadOnlyField(source='object_id')
 
     class Meta:
         model = Chat
@@ -179,7 +179,7 @@ class ChatSerializer(serializers.ModelSerializer):
             'created_at',
             'terminated_at',
             'parent_chat_type',
-            'parent_chat',
+            'parent_id',
         ]
 
     def create(self, validated_data):
@@ -203,7 +203,9 @@ class UpdateChatSerializer(StrictUpdateModelSerializer):
         fields = ['terminated_at']
 
     def update(self, instance, validated_data):
-        if instance.terminated_at is not None:
+        if ('terminated_at' in validated_data
+            and instance.terminated_at is not None):
+            
             raise ResourceLocked(
                 '`terminated_at` field can only be updated once'
             )
@@ -338,3 +340,66 @@ class CreateGroupChatSerializer(serializers.Serializer):
             )
 
         return group_chat
+
+
+# message serializers
+class MessageSerializer(serializers.ModelSerializer):
+    sender = serializers.PrimaryKeyRelatedField(read_only=True)
+    parent_chat_type = serializers.ReadOnlyField()
+    delivery_status = serializers.ReadOnlyField()
+    time_tag = serializers.ReadOnlyField()
+    deleted_at = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Message
+        fields = [
+            'id',
+            'sender',
+            'parent_id',
+            'parent_chat_type',
+            'content_format',
+            'delivery_status',
+            'time_tag',
+            'deleted_at',
+        ]
+
+    def create(self, validated_data):
+        user = self.context['user']
+        parent_model = self.context['parent_chat_model']
+        parent_chat_type = self.context['parent_chat_type']
+
+        content_type = ContentType.objects.get_for_model(parent_model)
+
+        return Message.objects.create(
+            sender=user,
+            parent_content_type=content_type,
+            parent_chat_type=parent_chat_type,
+            **validated_data
+        )
+    
+
+class UpdateMessageSerializer(StrictUpdateModelSerializer):
+    class Meta:
+        model = Message
+        fields = ['delivery_status', 'time_tag', 'deleted_at']
+
+    def update(self, instance, validated_data):
+        status_order = {'P': 0, 'S': 1, 'D': 2, 'V': 3}
+        errors = {}
+
+        status = validated_data.get('delivery_status')
+        if status:
+            current_status = instance.delivery_status
+            if status_order[current_status] > status_order[status]:
+                errors['delivery_status'] = 'invalid status update sequence'
+        
+        single_update_fields = ['time_tag', 'deleted_at']
+
+        for field in single_update_fields:
+            if field in validated_data and getattr(instance, field):
+                errors[field] = 'field can only be updated once'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return super().update(instance, validated_data)

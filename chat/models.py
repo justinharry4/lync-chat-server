@@ -20,7 +20,11 @@ class Profile(models.Model):
 
 
 class ProfilePhoto(models.Model):
-    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='photo')
+    profile = models.OneToOneField(
+        Profile,
+        on_delete=models.CASCADE,
+        related_name='photo'
+    )
     image = models.ImageField(upload_to='chat/images')
     uploaded_at = models.DateTimeField(auto_now=True)
 
@@ -51,11 +55,11 @@ class PrivateChat(models.Model):
         related_name='private_chats'
     )
     participant_users_tag = models.CharField(max_length=100, null=True)
+    messages = GenericRelation('Message', related_query_name='private_chat')
 
     @classmethod
     def generate_participants_tag(cls, user_ids):
         str_ids = [str(user_id) for user_id in user_ids]
-
         return ' '.join(str_ids)
     
     def save(self, force_insert=False, force_update=False, using =None, update_fields=None):
@@ -99,6 +103,7 @@ class GroupChat(models.Model):
         settings.AUTH_USER_MODEL,
         through='GroupChatAdmin',
     )
+    messages = GenericRelation('Message', related_query_name='group_chat')
 
 class GroupChatParticipant(models.Model):
     group_chat = models.ForeignKey(
@@ -128,3 +133,64 @@ class GroupChatAdmin(models.Model):
     is_creator = models.BooleanField(default=False)
 
 
+class Message(models.Model):    
+    PARENT_CHAT_PRIVATE = 'PC'
+    PARENT_CHAT_GROUP = 'GC'
+
+    FORMAT_TEXT = 'TXT'
+    FORMAT_IMAGE = 'IMG'
+    FORMAT_AUDIO = 'AUD'
+    FORMAT_VIDEO = 'VID'
+
+    STATUS_IN_PROGRESS = 'P'
+    STATUS_SENT = 'S'
+    STATUS_DELIVERED = 'D'
+    STATUS_VIEWED = 'V'
+
+    PARENT_CHAT_CHOICES = [
+        (PARENT_CHAT_PRIVATE, 'PRIVATE CHAT'),
+        (PARENT_CHAT_GROUP, 'GROUP CHAT')
+    ]
+
+    FORMAT_CHOICES = [
+        (FORMAT_TEXT, 'TEXT'),
+        (FORMAT_IMAGE, 'IMAGE'),
+        (FORMAT_AUDIO, 'AUDIO'),
+        (FORMAT_VIDEO, 'VIDEO')
+    ]
+
+    STATUS_CHOICES = [
+        (STATUS_IN_PROGRESS, 'IN_PROGRESS'),
+        (STATUS_SENT, 'SENT'),
+        (STATUS_DELIVERED, 'DELIVERED'),
+        (STATUS_VIEWED, 'VIEWED')
+    ]
+
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT
+    )
+    parent_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE
+    )
+    parent_id = models.PositiveIntegerField()
+    parent_chat = GenericForeignKey('parent_content_type', 'parent_id')
+    parent_chat_type = models.CharField(max_length=2, choices=PARENT_CHAT_CHOICES)
+    content_format = models.CharField(max_length=3, choices=FORMAT_CHOICES)
+    time_tag = models.DateTimeField(null=True)
+    deleted_at = models.DateTimeField(null=True)
+    delivery_status = models.CharField(
+        max_length=1,
+        choices=STATUS_CHOICES,
+        default=STATUS_IN_PROGRESS
+    )
+
+
+class TextMessage(models.Model):
+    text = models.TextField()
+    message = models.OneToOneField(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='content'
+    )

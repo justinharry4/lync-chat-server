@@ -3,9 +3,9 @@ from django.urls import path
 from rest_framework_nested.routers import DefaultRouter, NestedDefaultRouter
 
 from .views import (
-    GroupChatAdminViewSet, GroupChatParticipantViewSet, ProfilePhotoViewSet,
+    GroupChatAdminViewSet, GroupChatMessageViewSet, GroupChatParticipantViewSet, ProfilePhotoViewSet,
     ProfileViewSet, PrivateChatViewSet, PrivateChatParticipantViewSet,
-    GroupChatViewSet, PCChatViewSet, GCChatViewSet
+    GroupChatViewSet, PCChatViewSet, GCChatViewSet, PrivateChatMessageViewSet
 )
 
 
@@ -35,8 +35,20 @@ group_chat_router.register('chats', GCChatViewSet,
 group_chat_router.register('admins', GroupChatAdminViewSet,
                            basename='groupchat-admins')
 
+pc_chat_router = NestedDefaultRouter(private_chat_router, 'chats',
+                                     lookup='chat')
+pc_chat_router.register('messages', PrivateChatMessageViewSet,
+                        basename='privatechat-messages')
+
+gc_chat_router = NestedDefaultRouter(group_chat_router, 'chats',
+                                     lookup='chat')
+gc_chat_router.register('messages', GroupChatMessageViewSet,
+                        basename='groupchat-messages')
+
 urlpatterns = base_router.urls
 urlpatterns += profiles_router.urls
 urlpatterns += private_chat_router.urls
 urlpatterns += group_chat_router.urls
+urlpatterns += pc_chat_router.urls
+urlpatterns += gc_chat_router.urls
 

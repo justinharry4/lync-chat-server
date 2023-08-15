@@ -18,13 +18,13 @@ from .viewsets import (
     CustomWriteNoUpdateModelViewSet
 )
 from .models import (
-    Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat, GroupChat,
+    Message, Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat, GroupChat,
     GroupChatParticipant, GroupChatAdmin
 )
 from .serializers import (
     CreateGroupChatSerializer, GroupChatAdminSerializer, GroupChatParticipantSerializer,
-    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, UpdateChatSerializer,
-    UpdateGroupChatAdminSerializer, UpdateProfileSerializer, UpdateStatusProfileSerializer,
+    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, MessageSerializer, UpdateChatSerializer,
+    UpdateGroupChatAdminSerializer, UpdateMessageSerializer, UpdateProfileSerializer, UpdateStatusProfileSerializer,
     PrivateChatParticipantSerializer, PrivateChatSerializer, ProfilePhotoSerializer,
     ProfileSerializer
 )
@@ -69,12 +69,12 @@ class ProfileViewSet(CustomWriteModelViewSet):
 class ProfilePhotoViewSet(NoUpdateModelViewSet):
     serializer_class = ProfilePhotoSerializer
     child = True
-    parent_model = Profile
-    parent_url_lookup = 'profile_pk'
+    parent_models = [Profile]
+    parent_url_lookups = ['profile_pk']
 
     def get_permissions(self):
         if self.action in ['create', 'destroy']:
-            profile_id = self.kwargs[self.parent_url_lookup]
+            profile_id = self.kwargs[self.parent_url_lookups[0]]
             perms = [IsAssociatedUser(profile_id, Profile)]
         else:
             perms = [IsAuthenticated()]
@@ -82,11 +82,11 @@ class ProfilePhotoViewSet(NoUpdateModelViewSet):
         return perms
 
     def get_queryset(self):
-        profile_id = self.kwargs[self.parent_url_lookup]
+        profile_id = self.kwargs[self.parent_url_lookups[0]]
         return ProfilePhoto.objects.filter(profile_id=profile_id)
         
     def get_serializer_context(self):
-        return {'profile_id': self.kwargs[self.parent_url_lookup]}
+        return {'profile_id': self.kwargs[self.parent_url_lookups[0]]}
 
 
 class PrivateChatViewSet(CustomWriteNoUpdateModelViewSet):
@@ -118,84 +118,16 @@ class PrivateChatViewSet(CustomWriteNoUpdateModelViewSet):
 class PrivateChatParticipantViewSet(ReadOnlyModelViewSet):
     serializer_class = PrivateChatParticipantSerializer
     child = True
-    parent_model = PrivateChat
-    parent_url_lookup = 'private_chat_pk'
+    parent_models = [PrivateChat]
+    parent_url_lookups = ['private_chat_pk']
 
     def get_permissions(self):
-        private_chat_id = self.kwargs[self.parent_url_lookup]
+        private_chat_id = self.kwargs[self.parent_url_lookups[0]]
         return [IsPrivateChatMember(private_chat_id)]
 
     def get_queryset(self):
-        private_chat_pk = self.kwargs[self.parent_url_lookup]
+        private_chat_pk = self.kwargs[self.parent_url_lookups[0]]
         return PrivateChatParticipant.objects.filter(private_chat_id=private_chat_pk)
-
-
-class BaseChatViewSet(CustomWriteModelViewSet):
-    http_method_names = ['get', 'post', 'patch', 'delete']
-    retrieve_serializer_class = ChatSerializer
-    child = True
-
-    def get_permissions(self):
-        parent_info = self.get_parent_info()
-        parent_chat_perm = parent_info['parent_chat_perm']
-        parent_chat_id = self.kwargs[self.parent_url_lookup]
-
-        perms = [parent_chat_perm(parent_chat_id)]
-
-        if self.action in ['retrieve', 'partial_update']:
-            perms.append(IsAssociatedUser(self.kwargs['pk']))
-        elif self.action == 'destroy':
-            perms = [IsAdminUser()]
-
-        return perms
-    
-    def get_queryset(self):
-        parent_info = self.get_parent_info()
-        parent_chat_type = parent_info['parent_chat_type']
-        parent_chat_id = self.kwargs[self.parent_url_lookup]
-        
-        return Chat.objects.filter(
-            user=self.request.user,
-            object_id=parent_chat_id,
-            parent_chat_type=parent_chat_type
-        )
-    
-    def get_serializer_class(self):
-        if self.action == 'partial_update':
-            return UpdateChatSerializer
-        return ChatSerializer
-    
-    def get_serializer_context(self):
-        parent_info = self.get_parent_info()
-
-        return {
-            'user': self.request.user,
-            'parent_chat_model': self.parent_model,
-            'parent_chat_type': parent_info['parent_chat_type'],
-            'parent_chat_id': self.kwargs[self.parent_url_lookup]
-        }
-
-
-class PCChatViewSet(BaseChatViewSet):
-    parent_model = PrivateChat
-    parent_url_lookup = 'private_chat_pk'
-    
-    def get_parent_info(self):
-        return {
-            'parent_chat_type': 'PC',
-            'parent_chat_perm': IsPrivateChatMember
-        }
-
-
-class GCChatViewSet(BaseChatViewSet):
-    parent_model = GroupChat
-    parent_url_lookup = 'group_chat_pk'
-
-    def get_parent_info(self):
-        return {
-            'parent_chat_type': 'GC',
-            'parent_chat_perm': IsGroupChatMember
-        }
     
 
 class GroupChatViewSet(CustomWriteNoUpdateModelViewSet):
@@ -227,11 +159,11 @@ class GroupChatViewSet(CustomWriteNoUpdateModelViewSet):
 class GroupChatParticipantViewSet(NoUpdateModelViewSet):
     serializer_class = GroupChatParticipantSerializer
     child = True
-    parent_model = GroupChat
-    parent_url_lookup = 'group_chat_pk'
+    parent_models = [GroupChat]
+    parent_url_lookups = ['group_chat_pk']
 
     def get_permissions(self):
-        group_chat_id = self.kwargs[self.parent_url_lookup]
+        group_chat_id = self.kwargs[self.parent_url_lookups[0]]
 
         if self.action == 'create':
             perms = [IsGroupChatAdmin(group_chat_id)]
@@ -250,11 +182,11 @@ class GroupChatParticipantViewSet(NoUpdateModelViewSet):
         return perms
 
     def get_queryset(self):
-        group_chat_id = self.kwargs[self.parent_url_lookup]
+        group_chat_id = self.kwargs[self.parent_url_lookups[0]]
         return GroupChatParticipant.objects.filter(group_chat_id=group_chat_id)
     
     def get_serializer_context(self):
-        context = {'group_chat_id': self.kwargs[self.parent_url_lookup]}
+        context = {'group_chat_id': self.kwargs[self.parent_url_lookups[0]]}
         return context
     
 
@@ -262,11 +194,11 @@ class GroupChatAdminViewSet(CustomWriteModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete']
     retrieve_serializer_class = GroupChatAdminSerializer
     child = True
-    parent_model = GroupChat
-    parent_url_lookup = 'group_chat_pk'
+    parent_models = [GroupChat]
+    parent_url_lookups = ['group_chat_pk']
 
     def get_permissions(self):
-        group_chat_id = self.kwargs[self.parent_url_lookup]
+        group_chat_id = self.kwargs[self.parent_url_lookups[0]]
 
         if self.action in ['list', 'retrieve']:
             perms = [IsGroupChatMember(group_chat_id)]
@@ -276,7 +208,7 @@ class GroupChatAdminViewSet(CustomWriteModelViewSet):
         return perms
 
     def get_queryset(self):
-        group_chat_id = self.kwargs['group_chat_pk']
+        group_chat_id = self.kwargs[self.parent_url_lookups[0]]
         return GroupChatAdmin.objects.filter(group_chat_id=group_chat_id)
 
     def get_serializer_class(self):
@@ -285,7 +217,145 @@ class GroupChatAdminViewSet(CustomWriteModelViewSet):
         return GroupChatAdminSerializer
     
     def get_serializer_context(self):
-        context = {'group_chat_id': self.kwargs['group_chat_pk']}
+        context = {'group_chat_id': self.kwargs[self.parent_url_lookups[0]]}
         return context
-
     
+
+class BaseChatViewSet(CustomWriteModelViewSet):
+    http_method_names = ['get', 'post', 'patch', 'delete']
+    retrieve_serializer_class = ChatSerializer
+    child = True
+
+    def get_permissions(self):
+        parent_info = self.get_parent_info()
+        parent_chat_perm = parent_info['parent_chat_perm']
+        parent_chat_id = self.kwargs[self.parent_url_lookups[0]]
+
+        perms = [parent_chat_perm(parent_chat_id)]
+
+        if self.action in ['retrieve', 'partial_update']:
+            perms.append(IsAssociatedUser(self.kwargs['pk']))
+        elif self.action == 'destroy':
+            perms = [IsAdminUser()]
+
+        return perms
+    
+    def get_queryset(self):
+        parent_info = self.get_parent_info()
+        parent_chat_type = parent_info['parent_chat_type']
+        parent_chat_id = self.kwargs[self.parent_url_lookups[0]]
+        
+        return Chat.objects.filter(
+            user=self.request.user,
+            object_id=parent_chat_id,
+            parent_chat_type=parent_chat_type
+        )
+    
+    def get_serializer_class(self):
+        if self.action == 'partial_update':
+            return UpdateChatSerializer
+        return ChatSerializer
+    
+    def get_serializer_context(self):
+        parent_info = self.get_parent_info()
+
+        return {
+            'user': self.request.user,
+            'parent_chat_model': self.parent_models[0],
+            'parent_chat_type': parent_info['parent_chat_type'],
+            'parent_chat_id': self.kwargs[self.parent_url_lookups[0]]
+        }
+
+
+class PCChatViewSet(BaseChatViewSet):
+    parent_models = [PrivateChat]
+    parent_url_lookups = ['private_chat_pk']
+    
+    def get_parent_info(self):
+        return {
+            'parent_chat_type': 'PC',
+            'parent_chat_perm': IsPrivateChatMember
+        }
+
+
+class GCChatViewSet(BaseChatViewSet):
+    parent_models = [GroupChat]
+    parent_url_lookups = ['group_chat_pk']
+
+    def get_parent_info(self):
+        return {
+            'parent_chat_type': 'GC',
+            'parent_chat_perm': IsGroupChatMember
+        }
+
+
+class BaseMessageViewSet(ReadOnlyModelViewSet):
+    child = True
+
+    def get_permissions(self):
+        parent_info = self.get_parent_info()
+        parent_chat_perm = parent_info['parent_chat_perm']
+        parent_chat_id = self.kwargs[self.parent_url_lookups[0]]
+        chat_id = self.kwargs[self.parent_url_lookups[1]]
+
+        return [
+            parent_chat_perm(parent_chat_id),
+            IsAssociatedUser(chat_id, Chat)
+        ]
+
+    def get_queryset(self):
+        parent_info = self.get_parent_info()
+        parent_chat_type = parent_info['parent_chat_type']
+        parent_id = self.kwargs[self.parent_url_lookups[0]]
+        chat_id = self.kwargs[self.parent_url_lookups[1]]
+
+        if not Chat.objects.filter(
+            pk=chat_id,
+            object_id=parent_id,
+            parent_chat_type=parent_chat_type
+        ).exists():
+            parent_model = self.parent_models[0]
+
+            raise NotFound(
+                f'{parent_model.__name__} of id `{parent_id}` '
+                f'has no child Chat of id `{chat_id}`'
+            )
+
+        return Message.objects.filter(
+            parent_id=parent_id,
+            parent_chat_type=parent_chat_type
+        )
+    
+    def get_serializer_class(self):
+        return MessageSerializer
+
+    def get_serializer_context(self):
+        parent_info = self.get_parent_info()
+
+        return {
+            'user': self.request.user,
+            'parent_chat_model': self.parent_models[0],
+            'parent_chat_type': parent_info['parent_chat_type']
+        }
+    
+
+class PrivateChatMessageViewSet(BaseMessageViewSet):
+    parent_models = [PrivateChat, Chat]
+    parent_url_lookups = ['private_chat_pk', 'chat_pk']
+
+    def get_parent_info(self):
+        return {
+            'parent_chat_type': 'PC',
+            'parent_chat_perm': IsPrivateChatMember
+        }
+    
+
+class GroupChatMessageViewSet(BaseMessageViewSet):
+    parent_models = [GroupChat, Chat]
+    parent_url_lookups = ['group_chat_pk', 'chat_pk']
+
+    def get_parent_info(self):
+        return {
+            'parent_chat_type': 'GC',
+            'parent_chat_perm': IsGroupChatMember
+        }

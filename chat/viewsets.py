@@ -14,8 +14,8 @@ class CustomGenericViewSet(GenericViewSet):
     """
 
     child = False
-    parent_model = None
-    parent_url_lookup = None
+    parent_models = []
+    parent_url_lookups = []
     retrieve_serializer_class = None
 
     def initial(self, request, *args, **kwargs):
@@ -24,11 +24,11 @@ class CustomGenericViewSet(GenericViewSet):
         if self.child:
             self.check_parent_existence()
 
-    def get_parent_model(self):
-        return self.parent_model
+    def get_parent_models(self):
+        return self.parent_models
     
-    def get_parent_url_lookup(self):
-        return self.parent_url_lookup
+    def get_parent_url_lookups(self):
+        return self.parent_url_lookups
 
     def get_retrieve_serializer(self, *args, **kwargs):
         if self.retrieve_serializer_class:
@@ -36,33 +36,40 @@ class CustomGenericViewSet(GenericViewSet):
         return self.get_serializer_class()(*args, **kwargs)
     
     def check_parent_existence(self):
-        parent_model = self.get_parent_model()
-        parent_url_lookup = self.get_parent_url_lookup()
+        parent_models = self.get_parent_models()
+        parent_url_lookups = self.get_parent_url_lookups()
 
-        assert parent_model and parent_url_lookup, (
-            '`.parent_model` and `.parent_url_lookup` attributes or '
-            'the corresponding methods `.get_parent_model()` and '
-            '`.get_parent_url_lookup()` must be set on child viewsets '
+        assert parent_models and parent_url_lookups, (
+            '`.parent_models` and `.parent_url_lookups` attributes or '
+            'the corresponding methods `.get_parent_models()` and '
+            '`.get_parent_url_lookups()` must be set on child viewsets '
             'where `.child` is set to `True`'
         )
 
-        parent_id = self.kwargs[parent_url_lookup]
+        parent_ids = [str(self.kwargs[lookup]) for lookup in parent_url_lookups]
         
-        parent_object = (parent_model, str(parent_id))
+        parent_objects = zip(parent_models, parent_ids)
         missing_objects = getattr(self, 'missing_objects', [])
-        missing_parents = [(model, str(pk)) for model, pk in missing_objects
-                           if model == parent_model]
-        
-        if parent_object not in missing_parents:
-            missing_parents.append(parent_object)
+        missing_parents = [
+            (model, str(pk)) for model, pk
+            in missing_objects if model in parent_models
+        ]
 
+        for parent_object in parent_objects:
+            if parent_object not in missing_parents:
+                model, pk = parent_object
+                try:
+                    model.objects.get(pk=pk)
+                except model.DoesNotExist:
+                    missing_parents.append(parent_object)
+
+        errors = {}
         for model, pk in missing_parents:
-            try:
-                model.objects.get(pk=pk)
-            except model.DoesNotExist:
-                raise NotFound(
-                    f'parent {model.__name__} with id `{pk}` was not found'
-                )
+            model_name = model.__name__.lower()
+            errors[model_name] = f'parent with id `{pk}` was not found'
+
+        if errors:
+            raise NotFound(errors)
 
 
 class ReadOnlyModelViewSet(mixins.ListModelMixin,
