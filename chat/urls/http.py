@@ -2,7 +2,7 @@ from django.urls import path
 
 from rest_framework_nested.routers import DefaultRouter, NestedDefaultRouter
 
-from .views import (
+from ..views import (
     GroupChatAdminViewSet, GroupChatMessageViewSet, GroupChatParticipantViewSet, ProfilePhotoViewSet,
     ProfileViewSet, PrivateChatViewSet, PrivateChatParticipantViewSet,
     GroupChatViewSet, PCChatViewSet, GCChatViewSet, PrivateChatMessageViewSet
