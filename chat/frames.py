@@ -1,7 +1,7 @@
 import json
 
 from . import protocol
-from .exceptions import InvalidFrame, UnexpectedJSONInterface
+from .exceptions import InvalidFrame, UnexpectedJSONInterface, NotAuthenticated
 
 
 MAGIC_STR_LENGTH = len(protocol.HEADER_START)
@@ -95,7 +95,28 @@ class FrameParser():
         message = {'header': header, 'body': body}
 
         return message
+    
+
+class AuthFrameParser():
+    def __init__(self, message):
+        self.raw_message = message
+
+    def parse(self):
+        try: 
+            auth_data = json.loads(self.raw_message)
+        except json.JSONDecodeError as exc:
+            raise NotAuthenticated(
+                'auth message string is not valid JSON'
+            ) from exc
         
+        auth_key = protocol.AUTH_KEY
+        if auth_key not in auth_data:
+            raise NotAuthenticated(
+                f'auth header key {auth_key} missing in auth message'
+            )
+        
+        return auth_data 
+
 
 class TextFrame():
     def __init__(self, key, code, data={}):

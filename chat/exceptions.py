@@ -25,10 +25,18 @@ class UnexpectedJSONInterface(ProtocolError):
     status_code = lync_status.SERVER_UNEXPECTED_INTERFACE
 
 
-class InvalidMessageData(ProtocolError):
+class InvalidData(ProtocolError):
     status_code = lync_status.SERVER_INVALID_DATA
+
+
+class NotAuthenticated(ProtocolError):
+    status_code = lync_status.SERVER_NOT_AUTHENTICATED
 
 
 # others
 class UnboundDecorator(Exception):
+    pass
+
+
+class CodeNotAllowed(Exception):
     pass

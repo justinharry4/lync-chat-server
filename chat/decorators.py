@@ -1,5 +1,6 @@
-from .exceptions import UnboundDecorator
+from .exceptions import UnboundDecorator, CodeNotAllowed
 from .dispatch import MessageHandler
+from .status import CLIENT_ACKNOWLEDGMENT
 
 class MessageHandlerDecorator():
     def bind_consumer(self, consumer):
@@ -20,4 +21,23 @@ def message_handler(allowed_codes):
         handler = MessageHandler(func, allowed_codes)
         return handler
 
+    return decorator
+
+
+def ack_handler(allowed_server_codes):
+    def decorator(func):
+        def wrapped_func(*args, **kwargs):
+            server_code = kwargs['message_body']['server_code']
+
+            if server_code not in allowed_server_codes:
+                raise CodeNotAllowed(
+                    f'server status code `{server_code}` is not '
+                    'allowed by the acknowledgement handler'
+                )
+            
+            return func(*args, **kwargs)
+        
+        handler = MessageHandler(wrapped_func, CLIENT_ACKNOWLEDGMENT)
+        return handler
+    
     return decorator
