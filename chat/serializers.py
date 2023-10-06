@@ -347,7 +347,7 @@ class MessageSerializer(serializers.ModelSerializer):
     sender = serializers.PrimaryKeyRelatedField(read_only=True)
     parent_chat_type = serializers.ReadOnlyField()
     delivery_status = serializers.ReadOnlyField()
-    time_tag = serializers.ReadOnlyField()
+    time_stamp = serializers.ReadOnlyField()
     deleted_at = serializers.ReadOnlyField()
 
     class Meta:
@@ -359,7 +359,7 @@ class MessageSerializer(serializers.ModelSerializer):
             'parent_chat_type',
             'content_format',
             'delivery_status',
-            'time_tag',
+            'time_stamp',
             'deleted_at',
         ]
 
@@ -381,7 +381,7 @@ class MessageSerializer(serializers.ModelSerializer):
 class UpdateMessageSerializer(StrictUpdateModelSerializer):
     class Meta:
         model = Message
-        fields = ['delivery_status', 'time_tag', 'deleted_at']
+        fields = ['delivery_status', 'time_stamp', 'deleted_at']
 
     def update(self, instance, validated_data):
         status_order = {'P': 0, 'S': 1, 'D': 2, 'V': 3}
@@ -390,10 +390,11 @@ class UpdateMessageSerializer(StrictUpdateModelSerializer):
         status = validated_data.get('delivery_status')
         if status:
             current_status = instance.delivery_status
-            if status_order[current_status] > status_order[status]:
+            # if status_order[current_status] > status_order[status]:
+            if status_order[status] != (status_order[current_status] + 1):
                 errors['delivery_status'] = 'invalid status update sequence'
         
-        single_update_fields = ['time_tag', 'deleted_at']
+        single_update_fields = ['time_stamp', 'deleted_at']
 
         for field in single_update_fields:
             if field in validated_data and getattr(instance, field):

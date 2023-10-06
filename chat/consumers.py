@@ -1,9 +1,12 @@
+import uuid
+
 from channels.generic.websocket import WebsocketConsumer
+from asgiref.sync import async_to_sync
 
 from .frames import FrameParser, TextFrame, AuthFrameParser
 from .dispatch import Dispatcher
 from .handlers import PrivateChatMessageHandlerSet
-from .models import PrivateChat, Message, TextMessage
+from .models import PrivateChat, Message, TextMessage, ChatClient
 from .authentication import JWTAuthentication
 from .exceptions import ProtocolError, NotAuthenticated
 from . import status
@@ -16,7 +19,7 @@ class BaseChatConsumer(WebsocketConsumer):
         self.is_authenticated = False
 
         self.registry = {}
-        self.dispatcher = Dispatcher(self, *self.handler_sets)
+        self.dispatcher = Dispatcher(self, *self.handler_set_classes)
 
         self.accept()
 
@@ -44,9 +47,16 @@ class BaseChatConsumer(WebsocketConsumer):
         user = auth.authenticate(auth_data)
 
         self.scope['user'] = user
+        self.client = ChatClient.objects.create(
+            user=user,
+            chat_type=self.chat_type,
+            channel_name=self.channel_name,
+        )
 
-    def send_acknowledgement(self, key, client_code):
-        data = {'client_code': client_code}
+        self.is_authenticated = True
+
+    def send_acknowledgement(self, key, client_code, **kwargs):
+        data = {'client_code': client_code, **kwargs}
         frame = TextFrame(key, status.SERVER_ACKNOWLEDGMENT, data)
 
         self.send(bytes_data=frame.data)
@@ -55,9 +65,51 @@ class BaseChatConsumer(WebsocketConsumer):
 class PrivateChatConsumer(BaseChatConsumer):
     chat_model = PrivateChat
     chat_type = 'PC'
-    handler_sets = [PrivateChatMessageHandlerSet]
+    handler_set_classes = [PrivateChatMessageHandlerSet]
+    receiver_type = 'recieve.channel.layer.event'
 
-    def forward_text_data(self, message:Message):
-        private_chat = message.parent_chat
+    def recieve_channel_layer_event(self, event):
+        print('channel event recieved')
 
-        pass
+        event_data = event['data']
+
+        if event_data['content_format'] == Message.FORMAT_TEXT:
+            self.send_text_data(event_data)
+        else:
+            pass
+
+    def forward_text_data(self, message):
+        private_chat_id = message.parent_id
+        private_chat = self.chat_model.objects \
+            .prefetch_related('participant_users') \
+            .get(pk=private_chat_id)
+        
+        sender = self.scope['user']
+        queryset = private_chat.participant_users.exclude(pk=sender.id)
+        recipient = queryset[0]
+        clients = ChatClient.objects.filter(user=recipient)
+
+        channel_data = {
+            'type': self.receiver_type,
+            'data': {
+                'chat_id': private_chat_id,
+                'message_id': message.id,
+                'content': message.content.text,
+                'content_format': Message.FORMAT_TEXT,
+                'time_stamp': message.time_stamp.isoformat(),
+            }
+        }
+
+        for client in clients:
+            # print('chat_client', client, client.user)
+            channel_name = client.channel_name
+            async_to_sync(self.channel_layer.send)(channel_name, channel_data)  
+
+    def send_text_data(self, message_data):
+        key = str(uuid.uuid4())
+
+        data = {'chat_type': self.chat_type, **message_data}
+
+        frame = TextFrame(key, status.SERVER_HEAD_TEXT_EOC, data)
+
+        self.send(bytes_data=frame.data)

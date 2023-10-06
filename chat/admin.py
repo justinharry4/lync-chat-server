@@ -22,3 +22,27 @@ class PrivateChatParticipantAdmin(admin.ModelAdmin):
 @admin.register(models.Chat)
 class ChatAdmin(admin.ModelAdmin):
     pass
+
+@admin.register(models.GroupChat)
+class GroupChatAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(models.GroupChatParticipant)
+class GroupChatParticiantAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(models.GroupChatAdmin)
+class GroupChatAdmAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(models.Message)
+class MessageAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(models.TextMessage)
+class TextMessageAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(models.ChatClient)
+class ChatClientAdmin(admin.ModelAdmin):
+    pass

@@ -5,14 +5,6 @@ from .exceptions import InvalidData, CodeNotAllowed
 
 class Dispatcher():
     def __init__(self, consumer, *handler_set_classes):
-        # self.consumer = consumer
-        # consumer_class_dict = consumer.__class__.__dict__
-
-        # self.handlers = [
-        #     value for value in consumer_class_dict.values()
-        #     if isinstance(value, MessageHandler)
-        # ]
-
         self.consumer = consumer
         self.handler_pairs = []
         handler_sets = [cls(consumer) for cls in handler_set_classes]
@@ -26,21 +18,6 @@ class Dispatcher():
     def dispatch(self, message):
         header = message['header']
         status_code = header['status_code']
-
-        # for handler in self.handlers:
-        #     if status_code in handler.allowed_codes:
-        #         try:
-        #             handler(
-        #                 self.consumer,
-        #                 key=header['key'],
-        #                 status_code=status_code,
-        #                 message_body=message['body']
-        #             )
-        #             break
-        #         except CodeNotAllowed:
-        #             continue
-        #         except ValidationError as exc:
-        #             raise InvalidData(exc.detail)
 
         for handler, handler_set in self.handler_pairs:
             if status_code in handler.allowed_codes:

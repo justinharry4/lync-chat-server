@@ -178,7 +178,7 @@ class Message(models.Model):
     parent_chat = GenericForeignKey('parent_content_type', 'parent_id')
     parent_chat_type = models.CharField(max_length=2, choices=PARENT_CHAT_CHOICES)
     content_format = models.CharField(max_length=3, choices=FORMAT_CHOICES)
-    time_tag = models.DateTimeField(null=True)
+    time_stamp = models.DateTimeField(null=True)
     deleted_at = models.DateTimeField(null=True)
     delivery_status = models.CharField(
         max_length=1,
@@ -194,3 +194,21 @@ class TextMessage(models.Model):
         on_delete=models.CASCADE,
         related_name='content'
     )
+
+
+class ChatClient(models.Model):
+    PARENT_CHAT_PRIVATE = 'PC'
+    PARENT_CHAT_GROUP = 'GC'
+
+    PARENT_CHAT_CHOICES = [
+        (PARENT_CHAT_PRIVATE, 'PRIVATE CHAT'),
+        (PARENT_CHAT_GROUP, 'GROUP CHAT')
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
+    chat_type = models.CharField(max_length=2, choices=PARENT_CHAT_CHOICES)
+    channel_name = models.CharField(max_length=255)
+    connection_time = models.DateTimeField(auto_now_add=True)
