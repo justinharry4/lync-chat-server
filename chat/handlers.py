@@ -10,14 +10,6 @@ from .exceptions import InvalidData
 from . import status
 
 
-head_text_codes = [
-    status.CLIENT_HEAD_TEXT_EOC,
-    status.CLIENT_HEAD_TEXT_MCE
-]
-extra_text_codes = [
-    status.CLIENT_MORE_TEXT_EOC,
-    status.CLIENT_MORE_TEXT_MCE
-]
 head_file_codes = [
     status.CLIENT_HEAD_FILE_EOC,
     status.CLIENT_HEAD_FILE_MCE,
@@ -29,7 +21,7 @@ extra_file_codes = [
 
 
 class PrivateChatMessageHandlerSet(HandlerSet):
-    @message_handler(allowed_codes=head_text_codes)
+    @message_handler(allowed_codes=[status.CLIENT_TEXT_DATA])
     def handle_text_data(self, key, status_code, message_body):
         cons = self.consumer
         content_format = message_body['content_format']
@@ -61,29 +53,29 @@ class PrivateChatMessageHandlerSet(HandlerSet):
             serializer.is_valid(raise_exception=True)
             message = serializer.save()
             
-            entry = {'model_object': message}
+            # entry = {'model_object': message}
+            # if status_code == status.CLIENT_HEAD_TEXT_EOC:
 
-            if status_code == status.CLIENT_HEAD_TEXT_EOC:
-                TextMessage.objects.create(
-                    text=text,
-                    message=message
-                )
+            TextMessage.objects.create(
+                text=text,
+                message=message
+            )
 
-                update_data = {
-                    'delivery_status': Message.STATUS_SENT,
-                    'time_stamp': datetime.datetime.now(),
-                }
-                update_serializer = UpdateMessageSerializer(
-                    message,
-                    data=update_data,
-                )
-                update_serializer.is_valid(raise_exception=True)
-                update_serializer.save()
-                # pass
-            elif status_code == status.CLIENT_HEAD_TEXT_MCE:
-                entry['text_str'] = text
-                # pass
-            cons.registry.setdefault(key, entry)
+            update_data = {
+                'delivery_status': Message.STATUS_SENT,
+                'time_stamp': datetime.datetime.now(),
+            }
+            update_serializer = UpdateMessageSerializer(
+                message,
+                data=update_data,
+            )
+            update_serializer.is_valid(raise_exception=True)
+            update_serializer.save()
+
+            # elif status_code == status.CLIENT_HEAD_TEXT_MCE:
+            #     entry['text_str'] = text
+
+            # cons.registry.setdefault(key, entry)
 
         ack_data = {
             'message_id': message.id,

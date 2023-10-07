@@ -107,9 +107,8 @@ class PrivateChatConsumer(BaseChatConsumer):
 
     def send_text_data(self, message_data):
         key = str(uuid.uuid4())
-
+        
         data = {'chat_type': self.chat_type, **message_data}
-
-        frame = TextFrame(key, status.SERVER_HEAD_TEXT_EOC, data)
+        frame = TextFrame(key, status.SERVER_TEXT_DATA, data)
 
         self.send(bytes_data=frame.data)
