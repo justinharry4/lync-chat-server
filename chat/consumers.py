@@ -5,7 +5,7 @@ from asgiref.sync import async_to_sync
 
 from .frames import FrameParser, TextFrame, AuthFrameParser
 from .dispatch import Dispatcher
-from .handlers import PrivateChatMessageHandlerSet
+from .handlers import PrivateChatMessageHandlerSet, PrivateChatAckHandlerSet
 from .models import PrivateChat, Message, TextMessage, ChatClient
 from .authentication import JWTAuthentication
 from .exceptions import ProtocolError, NotAuthenticated
@@ -42,6 +42,9 @@ class BaseChatConsumer(WebsocketConsumer):
             except ProtocolError as exc:
                 print(exc.__class__.__name__, '\n', exc)
 
+    def channel_layer_send(self, channel_name, data):
+        async_to_sync(self.channel_layer.send)(channel_name, data)  
+
     def authenticate_client(self, auth_data):
         auth = self.authentication_class()
         user = auth.authenticate(auth_data)
@@ -65,18 +68,26 @@ class BaseChatConsumer(WebsocketConsumer):
 class PrivateChatConsumer(BaseChatConsumer):
     chat_model = PrivateChat
     chat_type = 'PC'
-    handler_set_classes = [PrivateChatMessageHandlerSet]
     receiver_type = 'recieve.channel.layer.event'
+    handler_set_classes = [
+        PrivateChatMessageHandlerSet,
+        PrivateChatAckHandlerSet,
+    ]
 
     def recieve_channel_layer_event(self, event):
         print('channel event recieved')
 
         event_data = event['data']
+        content_format = event_data.get('content_format')
+        status = event_data.get('delivery_status')
 
-        if event_data['content_format'] == Message.FORMAT_TEXT:
-            self.send_text_data(event_data)
-        else:
-            pass
+        if content_format:
+            if content_format == Message.FORMAT_TEXT:
+                self.send_text_data(event_data)
+            else:
+                pass
+        elif status:
+            self.send_delivery_status_data(event_data)
 
     def forward_text_data(self, message):
         private_chat_id = message.parent_id
@@ -103,12 +114,22 @@ class PrivateChatConsumer(BaseChatConsumer):
         for client in clients:
             # print('chat_client', client, client.user)
             channel_name = client.channel_name
-            async_to_sync(self.channel_layer.send)(channel_name, channel_data)  
+            # async_to_sync(self.channel_layer.send)(channel_name, channel_data)
+            self.channel_layer_send(channel_name, channel_data)
 
     def send_text_data(self, message_data):
         key = str(uuid.uuid4())
-        
         data = {'chat_type': self.chat_type, **message_data}
         frame = TextFrame(key, status.SERVER_TEXT_DATA, data)
+
+        entry = {'message_id': message_data['message_id']}
+        self.registry.setdefault(key, entry)
+
+        self.send(bytes_data=frame.data)
+
+    def send_delivery_status_data(self, status_data):
+        key = str(uuid.uuid4())
+        data = {'chat_type': self.chat_type, **status_data}
+        frame = TextFrame(key, status.SERVER_MESSAGE_STATUS, data)
 
         self.send(bytes_data=frame.data)

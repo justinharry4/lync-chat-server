@@ -40,8 +40,13 @@ class MessageHandler():
         self.handler_fn = func
         self.allowed_codes = allowed_codes
 
-    def __call__(self, consumer, *, key, status_code, message_body):
-        self.handler_fn(consumer, key, status_code, message_body)
+    def __call__(self, consumer, key, status_code, message_body):
+        self.handler_fn(
+            consumer,
+            key=key,
+            status_code=status_code,
+            message_body=message_body
+        )
 
     def __repr__(self):
         codes_str = str(self.allowed_codes)

@@ -2,7 +2,7 @@ import datetime
 
 from django.db import transaction
 
-from .models import Message, TextMessage
+from .models import Message, TextMessage, ChatClient
 from .serializers import MessageSerializer, UpdateMessageSerializer
 from .dispatch import HandlerSet
 from .decorators import message_handler, ack_handler
@@ -84,3 +84,38 @@ class PrivateChatMessageHandlerSet(HandlerSet):
         
         cons.send_acknowledgement(key, status_code, **ack_data)
         cons.forward_text_data(message)
+
+
+class PrivateChatAckHandlerSet(HandlerSet):
+    @ack_handler(allowed_server_codes=[status.SERVER_TEXT_DATA])
+    def ack_text_data_send(self, key, status_code, message_body):
+        cons = self.consumer
+        entry = cons.registry.get(key)
+
+        message_id = entry['message_id']
+        message = Message.objects.select_related('sender').get(pk=message_id)
+
+        update_data = {'delivery_status': Message.STATUS_DELIVERED}
+        update_serializer = UpdateMessageSerializer(message, update_data)
+        update_serializer.is_valid(raise_exception=True)
+        update_serializer.save()
+
+        cons.registry.pop(key)
+
+        sender = message.sender
+        clients = ChatClient.objects.filter(user=sender)
+
+        channel_data = {
+            'type': cons.receiver_type,
+            'data': {
+                'chat_id': message.parent_id,
+                'message_id': message.id,
+                'delivery_status': message.delivery_status,
+            }
+        }
+
+        for client in clients:
+            print('sender_client', client, client.user)
+            channel_name = client.channel_name
+            cons.channel_layer_send(channel_name, channel_data)
+

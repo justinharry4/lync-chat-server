@@ -37,7 +37,7 @@ def ack_handler(allowed_server_codes):
             
             return func(*args, **kwargs)
         
-        handler = MessageHandler(wrapped_func, CLIENT_ACKNOWLEDGMENT)
+        handler = MessageHandler(wrapped_func, [CLIENT_ACKNOWLEDGMENT])
         return handler
     
     return decorator
