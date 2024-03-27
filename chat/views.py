@@ -23,7 +23,7 @@ from .models import (
 )
 from .serializers import (
     CreateGroupChatSerializer, GroupChatAdminSerializer, GroupChatParticipantSerializer,
-    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, MessageSerializer, UpdateChatSerializer,
+    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, MessageSerializer,
     UpdateGroupChatAdminSerializer, UpdateMessageSerializer, UpdateProfileSerializer, UpdateStatusProfileSerializer,
     PrivateChatParticipantSerializer, PrivateChatSerializer, ProfilePhotoSerializer,
     ProfileSerializer
@@ -223,6 +223,7 @@ class GroupChatAdminViewSet(CustomWriteModelViewSet):
 
 class BaseChatViewSet(CustomWriteModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete']
+    serializer_class = ChatSerializer
     retrieve_serializer_class = ChatSerializer
     child = True
 
@@ -251,11 +252,6 @@ class BaseChatViewSet(CustomWriteModelViewSet):
             parent_chat_type=parent_chat_type
         )
     
-    def get_serializer_class(self):
-        if self.action == 'partial_update':
-            return UpdateChatSerializer
-        return ChatSerializer
-    
     def get_serializer_context(self):
         parent_info = self.get_parent_info()
 
@@ -266,6 +262,23 @@ class BaseChatViewSet(CustomWriteModelViewSet):
             'parent_chat_id': self.kwargs[self.parent_url_lookups[0]]
         }
 
+    @action(detail=False, url_path='current', methods=['GET'])
+    def get_current_chat(self, request, private_chat_pk):
+        queryset = self.get_queryset()
+        current_chat = queryset.filter(terminated_at=None).first()
+        serializer = ChatSerializer(current_chat)
+        return Response(data=serializer.data, status=status.HTTP_200_OK)
+    
+    # @action(detail=True, url_path='close', methods=['PATCH'])
+    # def close_chat(self, request, private_chat_pk, pk):
+    #     queryset = self.get_queryset()
+    #     chat = get_object_or_404(queryset, pk=pk)
+    #     serializer = ChatSerializer(chat, data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+    #     serializer.save()
+
+    #     return Response(serializer.data, status=status.HTTP_200_OK)
+    
 
 class PCChatViewSet(BaseChatViewSet):
     parent_models = [PrivateChat]

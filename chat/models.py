@@ -55,7 +55,7 @@ class PrivateChat(models.Model):
         related_name='private_chats'
     )
     participant_users_tag = models.CharField(max_length=100, null=True)
-    messages = GenericRelation('Message', related_query_name='private_chat')
+    # messages = GenericRelation('Message', related_query_name='private_chat')
 
     @classmethod
     def generate_participants_tag(cls, user_ids):

@@ -1,3 +1,5 @@
+import datetime
+
 from django.db import transaction
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
@@ -186,31 +188,56 @@ class ChatSerializer(serializers.ModelSerializer):
         user = self.context['user']
         model = self.context['parent_chat_model']
         parent_chat_id = self.context['parent_chat_id']
+        parent_chat_type = self.context['parent_chat_type']
         content_type = ContentType.objects.get_for_model(model)
+
+        queryset = Chat.objects.filter(
+            user=user,
+            terminated_at=None, 
+            object_id=parent_chat_id,
+            parent_chat_type=parent_chat_type,
+        )
+        
+        if queryset.count() != 0:
+            raise serializers.ValidationError(
+                'an open chat belonging to the current user exists'
+            )
 
         return Chat.objects.create(
             user=user,
-            parent_chat_type=self.context['parent_chat_type'],
+            parent_chat_type=parent_chat_type,
             content_type=content_type,
             object_id=parent_chat_id,
             **validated_data
         )
     
-
-class UpdateChatSerializer(StrictUpdateModelSerializer):
-    class Meta:
-        model = Chat
-        fields = ['terminated_at']
-
     def update(self, instance, validated_data):
-        if ('terminated_at' in validated_data
-            and instance.terminated_at is not None):
-            
+        if instance.terminated_at is not None:
             raise ResourceLocked(
-                '`terminated_at` field can only be updated once'
+                'The referenced chat has already been terminated'
             )
+        
+        instance.terminated_at = datetime.datetime.now()
+        instance.save()
 
-        return super().update(instance, validated_data)
+        return instance
+    
+
+# class UpdateChatSerializer(StrictUpdateModelSerializer):
+#     class Meta:
+#         model = Chat
+#         fields = ['terminated_at']
+
+#     def update(self, instance, validated_data):
+#         if instance.terminated_at is not None:
+#             raise ResourceLocked(
+#                 '`terminated_at` field can only be updated once'
+#             )
+        
+#         instance.terminated_at = datetime.datetime.now()
+#         instance.save()
+
+#         return instance
 
 
 # group chat participant serializer
