@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework import mixins
 from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 
 from .permissions import (
     IsAssociatedUser, IsGroupChatAdmin, IsGroupChatCreator,
@@ -28,7 +28,7 @@ from .serializers import (
     PrivateChatParticipantSerializer, PrivateChatSerializer, ProfilePhotoSerializer,
     ProfileSerializer
 )
-
+from .exceptions import ResourceLocked
 
 
 class ProfileViewSet(CustomWriteModelViewSet):
@@ -304,6 +304,8 @@ class GCChatViewSet(BaseChatViewSet):
 
 class BaseMessageViewSet(ReadOnlyModelViewSet):
     child = True
+    # retrieve_serializer_class = MessageSerializer
+    # http_method_names = ['get', 'post', 'patch', 'delete']
 
     def get_permissions(self):
         parent_info = self.get_parent_info()
@@ -322,24 +324,61 @@ class BaseMessageViewSet(ReadOnlyModelViewSet):
         parent_id = self.kwargs[self.parent_url_lookups[0]]
         chat_id = self.kwargs[self.parent_url_lookups[1]]
 
-        if not Chat.objects.filter(
-            pk=chat_id,
-            object_id=parent_id,
-            parent_chat_type=parent_chat_type
-        ).exists():
+        # if not Chat.objects.filter(
+        #     pk=chat_id,
+        #     object_id=parent_id,
+        #     parent_chat_type=parent_chat_type
+        # ).exists():
+        #     parent_model = self.parent_models[0]
+
+        #     raise NotFound(
+        #         f'{parent_model.__name__} of id `{parent_id}` '
+        #         f'has no child Chat of id `{chat_id}`'
+        #     )
+
+        chat = Chat.objects.get(pk=chat_id)
+        
+        if not (chat.object_id == int(parent_id) and 
+            chat.parent_chat_type == parent_chat_type
+        ):
             parent_model = self.parent_models[0]
 
             raise NotFound(
                 f'{parent_model.__name__} of id `{parent_id}` '
                 f'has no child Chat of id `{chat_id}`'
             )
+        
+        # debug code
+        # query_dict = {
+        #     'parent_id': parent_id,
+        #     'parent_chat_type': parent_chat_type,
+        #     'time_stamp__gte': chat.created_at,
+        #     'deleted_at': None
+        # }
 
+        if chat.terminated_at is not None:
+            # debug code
+            # query_dict['time_stamp__lte'] = chat.terminated_at
+
+            # dev code
+            raise ResourceLocked(
+                'The referenced Chat has been terminated'
+            )
+
+        # debug code
+        # return Message.objects.filter(**query_dict)
+
+        # dev code
         return Message.objects.filter(
             parent_id=parent_id,
-            parent_chat_type=parent_chat_type
+            parent_chat_type=parent_chat_type,
+            time_stamp__gte=chat.created_at,
+            deleted_at=None
         )
     
     def get_serializer_class(self):
+        # if self.action == 'partial_update':
+        #     return UpdateMessageSerializer
         return MessageSerializer
 
     def get_serializer_context(self):

@@ -6,7 +6,7 @@ from . import status as lync_status
 
 class ResourceLocked(APIException):
     status_code = status.HTTP_423_LOCKED
-    default_detail = 'writes to the resource are not allowed'
+    default_detail = 'Retrieval or modification of the resource is not allowed'
     default_code = 'locked'
 
 
