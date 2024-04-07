@@ -29,6 +29,7 @@ from .serializers import (
     ProfileSerializer
 )
 from .exceptions import ResourceLocked
+from .pagination import MessagePagination
 
 
 class ProfileViewSet(CustomWriteModelViewSet):
@@ -306,6 +307,7 @@ class BaseMessageViewSet(ReadOnlyModelViewSet):
     child = True
     # retrieve_serializer_class = MessageSerializer
     # http_method_names = ['get', 'post', 'patch', 'delete']
+    pagination_class = MessagePagination
 
     def get_permissions(self):
         parent_info = self.get_parent_info()
@@ -368,12 +370,19 @@ class BaseMessageViewSet(ReadOnlyModelViewSet):
         # debug code
         # return Message.objects.filter(**query_dict)
 
+        allowed_statuses = [
+            Message.STATUS_SENT,
+            Message.STATUS_DELIVERED,
+            Message.STATUS_VIEWED
+        ]
+
         # dev code
         return Message.objects.filter(
             parent_id=parent_id,
             parent_chat_type=parent_chat_type,
             time_stamp__gte=chat.created_at,
-            deleted_at=None
+            delivery_status__in=allowed_statuses,
+            deleted_at=None,
         )
     
     def get_serializer_class(self):
