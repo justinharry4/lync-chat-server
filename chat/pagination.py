@@ -49,15 +49,17 @@ class MessagePagination(BasePagination):
         return self.paginated_set
         
     def get_paginated_response(self, data):
-        response_data = OrderedDict([
+        response_data = OrderedDict()
+        
+        response_data.update([
             ('redirected', self.is_redirected)
         ])
 
-        # if self.category in ['initial', 'older', 'newer']:
-        #     response_data.update([
-        #         ('next', self.get_next_link()),
-        #         ('previous', self.get_previous_link())
-        #     ])
+        if self.category in ['initial', 'older', 'newer']:
+            response_data.update([
+                ('next', self.get_next_link(data)),
+                ('previous', self.get_previous_link(data))
+            ])
 
         if self.category in ['initial', 'unread']:
             response_data.update([
@@ -120,21 +122,21 @@ class MessagePagination(BasePagination):
 
         new_msg_count = self.count_set(self.target_start_set)
 
-        if old_msg_count < self.default_size:
+        if old_msg_count <= self.default_size:
             start_idx = 0
+            self.has_previous = False
         else:
             start_idx = old_msg_count - self.default_size 
+            self.has_previous = True
 
-        if new_msg_count < self.default_size:
+        if new_msg_count <= self.default_size:
             end_idx = None
+            self.has_next = False
         else:
             end_idx = middle_idx + self.default_size
+            self.has_next = True
 
-        initial_messages = list(self.queryset[start_idx:end_idx])
-        # self.oldest_in_set = initial_messages[0]
-        # self.latest_in_set = initial_messages[-1]
-
-        return initial_messages
+        return list(self.queryset[start_idx:end_idx])
     
     def get_unread_messages(self):
         target_idx = self.get_first_new_message_index()
@@ -161,16 +163,14 @@ class MessagePagination(BasePagination):
         ref_message_idx = self.get_message_index(ref_id, is_oldest=False)
         older_msg_count = self.target_end_set.count() - 1
 
-        if older_msg_count < size:
+        if older_msg_count <= size:
             start_idx = 0
+            self.has_previous = False
         else:
             start_idx = older_msg_count - size
+            self.has_previous = True
 
-        older_messages = list(self.queryset[start_idx:ref_message_idx])
-        # self.oldest_in_set = older_messages[0]
-        # self.latest_in_set = older_messages[-1]
-
-        return older_messages
+        return list(self.queryset[start_idx:ref_message_idx])
 
     def get_newer_messages(self, params):
         ref_id = params['ref_id']
@@ -183,17 +183,16 @@ class MessagePagination(BasePagination):
         newer_msg_count = self.target_start_set.count() - 1
         start_idx = ref_message_idx + 1
 
-        if newer_msg_count < size:
+        if newer_msg_count <= size:
             end_idx = None
+            self.has_next = False
         else:
             end_idx = start_idx + size
+            self.has_next = True
 
         newer_messages = list(self.queryset[start_idx:end_idx])
-        # self.oldest_in_set = newer_messages[0]
-        # self.latest_in_set = newer_messages[-1]
 
         return newer_messages
-
         
     def get_message_index(self, message_id, is_oldest):
         target_message = self.queryset.get(pk=message_id)
@@ -241,31 +240,40 @@ class MessagePagination(BasePagination):
             return iterable.count()
         return len(iterable)
     
-    def get_next_link(self):
-        # CAUTION! CODE HAS NOT BEEN TESTED. IS LIKELY TO BE MODIFIED
-        
-        if self.category not in ['initial', 'older', 'newer']:
+    def get_next_link(self, data):
+        if not getattr(self, 'has_next', False):
+            return None
+
+        latest_message_data = data[-1]
+        ref_id = latest_message_data['id']
+
+        next_url = self.modify_query_params('newer', ref_id)
+        return next_url
+    
+    def get_previous_link(self, data):
+        if not getattr(self, 'has_previous', False):
             return None
         
-        latest_message = self.latest_in_set
-        ref_id = latest_message.id
+        oldest_message_data = data[0]
+        ref_id = oldest_message_data['id']
+        
+        previous_url = self.modify_query_params('older', ref_id)
+        return previous_url
 
+    def modify_query_params(self, category, ref_id):
         url = self.request.build_absolute_uri()
-        print('initial url', url)
 
         size = self.request.query_params.get(self.size_param, None)
         if size is not None:
             url = remove_query_param(url, self.size_param)
-            print('cleaned url', url)
 
-        next_url = url
-        query_dict = {self.category_param: 'newer', self.ref_param: ref_id}
+        modified_url = url
+        query_dict = {self.category_param: category, self.ref_param: ref_id}
 
         for key, value in query_dict.items():
-            next_url = replace_query_param(next_url, key, value)
+            modified_url = replace_query_param(modified_url, key, value)
 
-        print('next_url', next_url)
-        return next_url
+        return modified_url
     
     def redirect(self):
         self.category = self.default_category
