@@ -2,8 +2,8 @@ import datetime
 
 from django.db import transaction
 
-from .models import Message, TextMessage, ChatClient
-from .serializers import MessageSerializer, UpdateMessageSerializer
+from .models import Chat, Message, TextMessage, ChatClient
+from .serializers import ChatSerializer, MessageSerializer, UpdateMessageSerializer
 from .dispatch import HandlerSet
 from .decorators import message_handler, ack_handler
 from .exceptions import InvalidData
@@ -18,6 +18,29 @@ extra_file_codes = [
     status.CLIENT_MORE_FILE_EOC,
     status.CLIENT_MORE_FILE_MCE
 ]
+
+def get_term_chat_users(parent_chat, parent_chat_type):
+    participant_users = parent_chat.participant_users.all()
+
+    open_chats = Chat.objects \
+        .select_related('user') \
+        .filter(
+            user__in=participant_users,
+            object_id=parent_chat.id,
+            parent_chat_type=parent_chat_type,
+            terminated_at=None,
+        )
+    
+    participant_user_ids = [user.id for user in participant_users]
+    open_chat_user_ids = [chat.user.id for chat in open_chats]
+    term_chat_user_ids = set(participant_user_ids) - set(open_chat_user_ids)
+
+    term_chat_users = [
+        user for user in participant_users
+        if user.id in term_chat_user_ids
+    ]
+    
+    return term_chat_users
 
 
 class PrivateChatMessageHandlerSet(HandlerSet):
@@ -34,6 +57,32 @@ class PrivateChatMessageHandlerSet(HandlerSet):
 
         chat_id = message_body['chat_id']
         text = message_body['content']
+
+        private_chat = cons.chat_model.objects \
+            .prefetch_related('participant_users') \
+            .get(pk=chat_id)
+        
+        term_chat_users = get_term_chat_users(
+            parent_chat=private_chat,
+            parent_chat_type=cons.chat_type
+        )
+
+        if len(term_chat_users) > 0:
+            chat_context = {
+                'parent_chat_model': cons.chat_model,
+                'parent_chat_type': cons.chat_type,
+                'parent_chat_id': private_chat.id,
+            }
+
+            for user in term_chat_users:
+                chat_context['user'] = user
+
+                chat_serializer = ChatSerializer(
+                    data={},
+                    context=chat_context,
+                )
+                chat_serializer.is_valid(raise_exception=True)
+                chat_serializer.save()
 
         message_context = {
             'user': cons.scope['user'],
@@ -52,9 +101,6 @@ class PrivateChatMessageHandlerSet(HandlerSet):
             )
             serializer.is_valid(raise_exception=True)
             message = serializer.save()
-            
-            # entry = {'model_object': message}
-            # if status_code == status.CLIENT_HEAD_TEXT_EOC:
 
             TextMessage.objects.create(
                 text=text,
@@ -71,11 +117,6 @@ class PrivateChatMessageHandlerSet(HandlerSet):
             )
             update_serializer.is_valid(raise_exception=True)
             update_serializer.save()
-
-            # elif status_code == status.CLIENT_HEAD_TEXT_MCE:
-            #     entry['text_str'] = text
-
-            # cons.registry.setdefault(key, entry)
 
         ack_data = {
             'message_id': message.id,

@@ -103,7 +103,7 @@ class GroupChat(models.Model):
         settings.AUTH_USER_MODEL,
         through='GroupChatAdmin',
     )
-    messages = GenericRelation('Message', related_query_name='group_chat')
+    # messages = GenericRelation('Message', related_query_name='group_chat')
 
 class GroupChatParticipant(models.Model):
     group_chat = models.ForeignKey(
