@@ -9,7 +9,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from .models import (
     GroupChat, GroupChatAdmin, GroupChatParticipant, Message, Profile, ProfilePhoto,
-    PrivateChat, PrivateChatParticipant, Chat, get_user_model
+    PrivateChat, PrivateChatParticipant, Chat, TextMessage, get_user_model
 )
 from .exceptions import ResourceLocked
 
@@ -376,6 +376,7 @@ class MessageSerializer(serializers.ModelSerializer):
     delivery_status = serializers.ReadOnlyField()
     time_stamp = serializers.ReadOnlyField()
     deleted_at = serializers.ReadOnlyField()
+    content = serializers.SerializerMethodField(method_name='get_content')
 
     class Meta:
         model = Message
@@ -388,7 +389,17 @@ class MessageSerializer(serializers.ModelSerializer):
             'delivery_status',
             'time_stamp',
             'deleted_at',
+            'content',
         ]
+
+    def get_content(self, message: Message):
+        if message.content_format == Message.FORMAT_TEXT:
+            serializer_class = TextMessageSerializer
+        
+        content_object = message.content
+        serializer = serializer_class(content_object)
+
+        return serializer.data
 
     def create(self, validated_data):
         user = self.context['user']
@@ -431,3 +442,11 @@ class UpdateMessageSerializer(StrictUpdateModelSerializer):
             raise serializers.ValidationError(errors)
 
         return super().update(instance, validated_data)
+
+
+class TextMessageSerializer(serializers.ModelSerializer):
+    # message = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = TextMessage
+        fields = ['id', 'text']
