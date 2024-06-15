@@ -416,10 +416,57 @@ class MessageSerializer(serializers.ModelSerializer):
         )
     
 
+class ListUpdateMessageSerializer(serializers.ListSerializer):
+    CUSTOM_KWARG = 'static'
+
+    def __init__(self, *args, **kwargs):
+        self.static = kwargs.pop(self.CUSTOM_KWARG, False)
+
+        super().__init__(*args, **kwargs)
+
+
+    def update(self, instance, validated_data):
+        if self.static:
+            return self.static_update(instance, validated_data)
+
+        return super().update(instance, validated_data)
+    
+    def static_update(self, instance, validated_data):
+        instance_set = instance
+        validated_data_dict, = validated_data
+        static_update_fields = ['delivery_status', 'deleted_at']
+
+        errors = {}
+        for key in validated_data_dict:
+            if (key in self.child.Meta.fields) and (key not in static_update_fields):
+                errors[key] = 'multiple static update not allowed for this field'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        for instance in instance_set:
+            serializer = self.child.__class__(instance, data=validated_data_dict)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+        return instance_set
+
+
 class UpdateMessageSerializer(StrictUpdateModelSerializer):
     class Meta:
         model = Message
         fields = ['delivery_status', 'time_stamp', 'deleted_at']
+        list_serializer_class = ListUpdateMessageSerializer
+
+    @classmethod
+    def many_init(cls, *args, **kwargs):
+        list_serializer_class = cls.Meta.list_serializer_class
+        list_kwargs = kwargs.copy()
+
+        kwargs.pop(list_serializer_class.CUSTOM_KWARG)
+        list_kwargs['child'] = cls(*args, **kwargs)
+
+        return list_serializer_class(*args, **list_kwargs)
 
     def update(self, instance, validated_data):
         status_order = {'P': 0, 'S': 1, 'D': 2, 'V': 3}
@@ -445,8 +492,6 @@ class UpdateMessageSerializer(StrictUpdateModelSerializer):
 
 
 class TextMessageSerializer(serializers.ModelSerializer):
-    # message = serializers.PrimaryKeyRelatedField(read_only=True)
-
     class Meta:
         model = TextMessage
         fields = ['id', 'text']

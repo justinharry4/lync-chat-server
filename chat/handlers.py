@@ -109,7 +109,7 @@ class PrivateChatMessageHandlerSet(HandlerSet):
 
             update_data = {
                 'delivery_status': Message.STATUS_SENT,
-                'time_stamp': datetime.datetime.now(),
+                'time_stamp': datetime.datetime.utcnow(),
             }
             update_serializer = UpdateMessageSerializer(
                 message,
@@ -125,6 +125,32 @@ class PrivateChatMessageHandlerSet(HandlerSet):
         
         cons.send_acknowledgement(key, status_code, **ack_data)
         cons.forward_text_data(message)
+
+    @message_handler(allowed_codes=[status.CLIENT_MESSAGE_STATUS])
+    def handle_delivery_status_data(self, key, status_code, message_body):
+        cons = self.consumer
+        chat_id = message_body['chat_id']
+        delivery_status = message_body['delivery_status']
+        user = cons.scope['user']
+
+        undelivered_messages = Message.objects \
+            .exclude(sender=user) \
+            .filter(
+                parent_id=chat_id,
+                parent_chat_type=cons.chat_type,
+                delivery_status=Message.STATUS_SENT,
+            )
+
+        update_data = {'delivery_status': delivery_status}
+        update_serializer = UpdateMessageSerializer(
+            undelivered_messages,
+            data=[update_data],
+            many=True,
+            static=True,
+        )
+
+        update_serializer.is_valid(raise_exception=True)
+        update_serializer.save()
 
 
 class PrivateChatAckHandlerSet(HandlerSet):
