@@ -475,8 +475,8 @@ class UpdateMessageSerializer(StrictUpdateModelSerializer):
         status = validated_data.get('delivery_status')
         if status:
             current_status = instance.delivery_status
-            # if status_order[current_status] > status_order[status]:
-            if status_order[status] != (status_order[current_status] + 1):
+            if status_order[current_status] > status_order[status]:
+            # if status_order[status] != (status_order[current_status] + 1):
                 errors['delivery_status'] = 'invalid status update sequence'
         
         single_update_fields = ['time_stamp', 'deleted_at']

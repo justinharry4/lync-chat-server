@@ -20,7 +20,7 @@ class MessagePagination(BasePagination):
     ref_param = 'reference'
     size_param = 'size'
 
-    default_size = 5
+    default_size = 20
     default_category = 'initial'
     max_size = 30
 

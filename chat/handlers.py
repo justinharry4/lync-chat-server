@@ -133,17 +133,32 @@ class PrivateChatMessageHandlerSet(HandlerSet):
         delivery_status = message_body['delivery_status']
         user = cons.scope['user']
 
-        undelivered_messages = Message.objects \
+        if delivery_status == Message.STATUS_DELIVERED:
+            query_dict = {'delivery_status': Message.STATUS_SENT}
+        elif delivery_status == Message.STATUS_VIEWED:
+            query_dict = {
+                'delivery_status__in': [Message.STATUS_SENT, Message.STATUS_DELIVERED]
+            }
+
+        # undelivered_messages = Message.objects \
+        #     .exclude(sender=user) \
+        #     .filter(
+        #         parent_id=chat_id,
+        #         parent_chat_type=cons.chat_type,
+        #         delivery_status=Message.STATUS_SENT,
+        #     )
+
+        target_messages = Message.objects \
             .exclude(sender=user) \
             .filter(
                 parent_id=chat_id,
                 parent_chat_type=cons.chat_type,
-                delivery_status=Message.STATUS_SENT,
+                **query_dict,
             )
 
         update_data = {'delivery_status': delivery_status}
         update_serializer = UpdateMessageSerializer(
-            undelivered_messages,
+            target_messages,
             data=[update_data],
             many=True,
             static=True,
@@ -160,9 +175,10 @@ class PrivateChatAckHandlerSet(HandlerSet):
         entry = cons.registry.get(key)
 
         message_id = entry['message_id']
+        delivery_status = message_body['delivery_status']
         message = Message.objects.select_related('sender').get(pk=message_id)
 
-        update_data = {'delivery_status': Message.STATUS_DELIVERED}
+        update_data = {'delivery_status': delivery_status}
         update_serializer = UpdateMessageSerializer(message, update_data)
         update_serializer.is_valid(raise_exception=True)
         update_serializer.save()
@@ -182,7 +198,7 @@ class PrivateChatAckHandlerSet(HandlerSet):
         }
 
         for client in clients:
-            print('sender_client', client, client.user)
+            # print('sender_client', client, client.user)
             channel_name = client.channel_name
             cons.channel_layer_send(channel_name, channel_data)
 
