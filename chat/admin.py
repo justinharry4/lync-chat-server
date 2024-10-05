@@ -42,7 +42,3 @@ class MessageAdmin(admin.ModelAdmin):
 @admin.register(models.TextMessage)
 class TextMessageAdmin(admin.ModelAdmin):
     pass
-
-@admin.register(models.ChatClient)
-class ChatClientAdmin(admin.ModelAdmin):
-    pass

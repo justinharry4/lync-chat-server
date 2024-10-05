@@ -1,32 +1,31 @@
 from django.shortcuts import get_object_or_404
-from django.conf import settings
-from django.contrib.contenttypes.models import ContentType
 
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework import mixins
 from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound
 
 from .permissions import (
     IsAssociatedUser, IsGroupChatAdmin, IsGroupChatCreator,
     IsGroupChatMember, IsPrivateChatMember
 )
 from .viewsets import (
-    ReadOnlyModelViewSet, NoUpdateModelViewSet, CustomWriteModelViewSet, 
-    CustomWriteNoUpdateModelViewSet
+    ReadOnlyModelViewSet, NoUpdateModelViewSet,
+    CustomWriteModelViewSet, CustomWriteNoUpdateModelViewSet
 )
 from .models import (
-    Message, Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant, Chat, GroupChat,
-    GroupChatParticipant, GroupChatAdmin
+    Message, Profile, ProfilePhoto, PrivateChat, PrivateChatParticipant,
+    Chat, GroupChat, GroupChatParticipant, GroupChatAdmin
 )
 from .serializers import (
-    CreateGroupChatSerializer, GroupChatAdminSerializer, GroupChatParticipantSerializer,
-    GroupChatSerializer, ChatSerializer, CreatePrivateChatSerializer, MessageSerializer,
-    UpdateGroupChatAdminSerializer, UpdateMessageSerializer, UpdateProfileSerializer, UpdateStatusProfileSerializer,
-    PrivateChatParticipantSerializer, PrivateChatSerializer, ProfilePhotoSerializer,
-    ProfileSerializer
+    CreateGroupChatSerializer, GroupChatAdminSerializer,
+    GroupChatParticipantSerializer, GroupChatSerializer,
+    ChatSerializer, CreatePrivateChatSerializer, MessageSerializer,
+    UpdateGroupChatAdminSerializer, UpdateMessageSerializer,
+    UpdateProfileSerializer, UpdateStatusProfileSerializer,
+    PrivateChatParticipantSerializer, PrivateChatSerializer,
+    ProfilePhotoSerializer, ProfileSerializer
 )
 from .exceptions import ResourceLocked
 from .pagination import MessagePagination
@@ -269,16 +268,6 @@ class BaseChatViewSet(CustomWriteModelViewSet):
         current_chat = queryset.filter(terminated_at=None).first()
         serializer = ChatSerializer(current_chat)
         return Response(data=serializer.data, status=status.HTTP_200_OK)
-    
-    # @action(detail=True, url_path='close', methods=['PATCH'])
-    # def close_chat(self, request, private_chat_pk, pk):
-    #     queryset = self.get_queryset()
-    #     chat = get_object_or_404(queryset, pk=pk)
-    #     serializer = ChatSerializer(chat, data=request.data)
-    #     serializer.is_valid(raise_exception=True)
-    #     serializer.save()
-
-    #     return Response(serializer.data, status=status.HTTP_200_OK)
     
 
 class PCChatViewSet(BaseChatViewSet):

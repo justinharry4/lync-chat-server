@@ -2,11 +2,13 @@ import datetime
 
 from django.db import transaction
 
-from .models import Chat, Message, TextMessage, ChatClient
-from .serializers import ChatSerializer, MessageSerializer, UpdateMessageSerializer
-from .dispatch import HandlerSet
-from .decorators import message_handler, ack_handler
-from .exceptions import InvalidData
+from chat.models import Chat, Message, TextMessage
+from chat.serializers import ChatSerializer, MessageSerializer, UpdateMessageSerializer
+from dispatcher.models import Client
+from dispatcher.dispatch import HandlerSet
+from dispatcher.decorators import message_handler
+from dispatcher.exceptions import InvalidData
+from .decorators import ack_handler
 from . import status
 
 
@@ -140,14 +142,6 @@ class PrivateChatMessageHandlerSet(HandlerSet):
                 'delivery_status__in': [Message.STATUS_SENT, Message.STATUS_DELIVERED]
             }
 
-        # undelivered_messages = Message.objects \
-        #     .exclude(sender=user) \
-        #     .filter(
-        #         parent_id=chat_id,
-        #         parent_chat_type=cons.chat_type,
-        #         delivery_status=Message.STATUS_SENT,
-        #     )
-
         target_messages = Message.objects \
             .exclude(sender=user) \
             .filter(
@@ -186,7 +180,7 @@ class PrivateChatAckHandlerSet(HandlerSet):
         cons.registry.pop(key)
 
         sender = message.sender
-        clients = ChatClient.objects.filter(user=sender)
+        clients = Client.objects.filter(user=sender)
 
         channel_data = {
             'type': cons.receiver_type,
@@ -198,7 +192,6 @@ class PrivateChatAckHandlerSet(HandlerSet):
         }
 
         for client in clients:
-            # print('sender_client', client, client.user)
             channel_name = client.channel_name
             cons.channel_layer_send(channel_name, channel_data)
 

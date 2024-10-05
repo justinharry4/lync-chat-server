@@ -1,7 +1,7 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication as BaseJWTAuthentication
 
-from .protocol import AUTH_KEY
-from .exceptions import NotAuthenticated
+from dispatcher.protocol import AUTH_KEY
+from dispatcher.exceptions import NotAuthenticated
 
 
 class AuthRequest():

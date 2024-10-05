@@ -1,10 +1,8 @@
-from django.shortcuts import get_object_or_404
-from django.http.response import Http404
+from django.contrib.auth import get_user_model
 
 from rest_framework import permissions
-from rest_framework.exceptions import NotFound
 
-from .models import GroupChat, PrivateChat, get_user_model
+from .models import GroupChat, PrivateChat
 
 
 def silence_not_found_error(view, model, pk):

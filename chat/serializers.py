@@ -1,15 +1,15 @@
 import datetime
 
 from django.db import transaction
-from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth import get_user_model
 
 from rest_framework import serializers
-from rest_framework.exceptions import PermissionDenied
 
 from .models import (
-    GroupChat, GroupChatAdmin, GroupChatParticipant, Message, Profile, ProfilePhoto,
-    PrivateChat, PrivateChatParticipant, Chat, TextMessage, get_user_model
+    GroupChat, GroupChatAdmin, GroupChatParticipant,
+    Message, Profile, ProfilePhoto, PrivateChat,
+    PrivateChatParticipant, Chat, TextMessage
 )
 from .exceptions import ResourceLocked
 
@@ -143,10 +143,9 @@ class CreatePrivateChatSerializer(serializers.Serializer):
     
     def create(self, validated_data):
         user_ids = validated_data['participant_user_ids']
-        users_tag = PrivateChat.generate_participants_tag(user_ids)
-
+    
         with transaction.atomic():
-            if PrivateChat.objects.filter(participant_users_tag=users_tag).exists():
+            if PrivateChat.objects.exists_with_users(user_ids):
                 raise serializers.ValidationError(
                     'a private chat with the given participants already exists'
                 )
@@ -160,8 +159,6 @@ class CreatePrivateChatSerializer(serializers.Serializer):
                 ) for user_id in user_ids
             ]
             PrivateChatParticipant.objects.bulk_create(participants)
-
-            private_chat.save()
 
         return private_chat
 

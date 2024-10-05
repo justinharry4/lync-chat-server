@@ -1,24 +1,22 @@
-from rest_framework.views import APIView
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser, AllowAny
+from dispatcher.exceptions import CodeNotAllowed
+from dispatcher.dispatch import MessageHandler
+from .status import CLIENT_ACKNOWLEDGMENT
 
 
-def api_view_method(*args, perm_classes=[AllowAny], **kwargs):
-    """
-    Decorator to be applied to class-based view methods.
-    Behaves like the `api_view` decorator for function-based
-    views. 
-    """
-
+def ack_handler(allowed_server_codes):
     def decorator(func):
-        @api_view(*args, **kwargs)
-        @permission_classes(perm_classes)
-        def view_func(*view_args, **view_kwargs):
-            instance = APIView()
-            response = func(instance, *view_args, **view_kwargs)
-            return response
+        def wrapped_func(*args, **kwargs):
+            server_code = kwargs['message_body']['server_code']
+
+            if server_code not in allowed_server_codes:
+                raise CodeNotAllowed(
+                    f'server status code `{server_code}` is not '
+                    'allowed by the acknowledgement handler'
+                )
+            
+            return func(*args, **kwargs)
         
-        return view_func
+        handler = MessageHandler(wrapped_func, [CLIENT_ACKNOWLEDGMENT])
+        return handler
     
     return decorator
-

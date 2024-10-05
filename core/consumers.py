@@ -1,71 +1,17 @@
 import uuid
-
-from channels.generic.websocket import WebsocketConsumer
 from asgiref.sync import async_to_sync
 
-from .frames import FrameParser, TextFrame, AuthFrameParser
-from .dispatch import Dispatcher
+from dispatcher.consumers import BaseConsumer
+from dispatcher.frames import TextFrame
+from dispatcher.models import Client
+from chat.models import PrivateChat, Message
 from .handlers import PrivateChatMessageHandlerSet, PrivateChatAckHandlerSet
-from .models import PrivateChat, Message, TextMessage, ChatClient
 from .authentication import JWTAuthentication
-from .exceptions import ProtocolError, NotAuthenticated
 from . import status
 
 
-class BaseChatConsumer(WebsocketConsumer):
+class PrivateChatConsumer(BaseConsumer):
     authentication_class = JWTAuthentication
-
-    def connect(self):
-        self.is_authenticated = False
-
-        self.registry = {}
-        self.dispatcher = Dispatcher(self, *self.handler_set_classes)
-
-        self.accept()
-
-    def receive(self, text_data=None, bytes_data=None):
-        if not self.is_authenticated:
-            try:
-                parser = AuthFrameParser(bytes_data)
-                auth_data = parser.parse()
-
-                self.authenticate_client(auth_data)
-            except NotAuthenticated as exc:
-                self.close()
-                print(exc.__class__.__name__, '\n', exc)
-        else:
-            try:
-                parser = FrameParser(bytes_data)
-                message = parser.parse()
-
-                self.dispatcher.dispatch(message)
-            except ProtocolError as exc:
-                print(exc.__class__.__name__, '\n', exc)
-
-    def channel_layer_send(self, channel_name, data):
-        async_to_sync(self.channel_layer.send)(channel_name, data)  
-
-    def authenticate_client(self, auth_data):
-        auth = self.authentication_class()
-        user = auth.authenticate(auth_data)
-
-        self.scope['user'] = user
-        self.client = ChatClient.objects.create(
-            user=user,
-            chat_type=self.chat_type,
-            channel_name=self.channel_name,
-        )
-
-        self.is_authenticated = True
-
-    def send_acknowledgement(self, key, client_code, **kwargs):
-        data = {'client_code': client_code, **kwargs}
-        frame = TextFrame(key, status.SERVER_ACKNOWLEDGMENT, data)
-
-        self.send(bytes_data=frame.data)
-
-
-class PrivateChatConsumer(BaseChatConsumer):
     chat_model = PrivateChat
     chat_type = 'PC'
     receiver_type = 'recieve.channel.layer.event'
@@ -73,6 +19,15 @@ class PrivateChatConsumer(BaseChatConsumer):
         PrivateChatMessageHandlerSet,
         PrivateChatAckHandlerSet,
     ]
+
+    def send_acknowledgement(self, key, client_code, **kwargs):
+        data = {'client_code': client_code, **kwargs}
+        frame = TextFrame(key, status.SERVER_ACKNOWLEDGMENT, data)
+
+        self.send(bytes_data=frame.data)
+
+    def channel_layer_send(self, channel_name, data):
+        async_to_sync(self.channel_layer.send)(channel_name, data)  
 
     def recieve_channel_layer_event(self, event):
         print('channel event recieved')
@@ -98,7 +53,7 @@ class PrivateChatConsumer(BaseChatConsumer):
         sender = self.scope['user']
         queryset = private_chat.participant_users.exclude(pk=sender.id)
         recipient = queryset[0]
-        clients = ChatClient.objects.filter(user=recipient)
+        clients = Client.objects.filter(user=recipient)
 
         channel_data = {
             'type': self.receiver_type,

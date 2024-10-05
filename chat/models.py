@@ -4,12 +4,15 @@ from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelatio
 from django.conf import settings
 
 
-def get_user_model():
-    app_name, user_model_name = settings.AUTH_USER_MODEL.split('.')
-    content_type = ContentType.objects.get(app_label=app_name, model=user_model_name)
-    user_model = content_type.model_class()
-
-    return user_model
+class PrivateChatManager(models.Manager):
+    def exists_with_users(self, user_ids):
+        return PrivateChatParticipant.objects \
+            .values('private_chat_id') \
+            .filter(user_id__in=user_ids) \
+            .annotate(count=models.Count('id')) \
+            .filter(count__gt=1) \
+            .exists()
+        
 
 class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -55,22 +58,8 @@ class PrivateChat(models.Model):
         related_name='private_chats'
     )
     participant_users_tag = models.CharField(max_length=100, null=True)
-    # messages = GenericRelation('Message', related_query_name='private_chat')
 
-    @classmethod
-    def generate_participants_tag(cls, user_ids):
-        str_ids = [str(user_id) for user_id in user_ids]
-        return ' '.join(str_ids)
-    
-    def save(self, force_insert=False, force_update=False, using =None, update_fields=None):
-        if self.id and self.participant_users.count() > 0:
-            users = self.participant_users.all().order_by('id')
-            user_ids = [user.id for user in users]
-            tag = PrivateChat.generate_participants_tag(user_ids)
-
-            self.participant_users_tag = tag
-
-        return super().save(force_insert, force_update, using, update_fields)
+    objects = PrivateChatManager()
 
 
 class PrivateChatParticipant(models.Model):
@@ -103,7 +92,7 @@ class GroupChat(models.Model):
         settings.AUTH_USER_MODEL,
         through='GroupChatAdmin',
     )
-    # messages = GenericRelation('Message', related_query_name='group_chat')
+    
 
 class GroupChatParticipant(models.Model):
     group_chat = models.ForeignKey(
@@ -194,21 +183,3 @@ class TextMessage(models.Model):
         on_delete=models.CASCADE,
         related_name='content'
     )
-
-
-class ChatClient(models.Model):
-    PARENT_CHAT_PRIVATE = 'PC'
-    PARENT_CHAT_GROUP = 'GC'
-
-    PARENT_CHAT_CHOICES = [
-        (PARENT_CHAT_PRIVATE, 'PRIVATE CHAT'),
-        (PARENT_CHAT_GROUP, 'GROUP CHAT')
-    ]
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE
-    )
-    chat_type = models.CharField(max_length=2, choices=PARENT_CHAT_CHOICES)
-    channel_name = models.CharField(max_length=255)
-    connection_time = models.DateTimeField(auto_now_add=True)

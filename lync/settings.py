@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'debug_toolbar',
     'core',
     'chat',
+    'dispatcher'
 ]
 
 MIDDLEWARE = [
