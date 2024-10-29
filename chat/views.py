@@ -294,8 +294,6 @@ class GCChatViewSet(BaseChatViewSet):
 
 class BaseMessageViewSet(ReadOnlyModelViewSet):
     child = True
-    # retrieve_serializer_class = MessageSerializer
-    # http_method_names = ['get', 'post', 'patch', 'delete']
     pagination_class = MessagePagination
 
     def get_permissions(self):
@@ -315,18 +313,6 @@ class BaseMessageViewSet(ReadOnlyModelViewSet):
         parent_id = self.kwargs[self.parent_url_lookups[0]]
         chat_id = self.kwargs[self.parent_url_lookups[1]]
 
-        # if not Chat.objects.filter(
-        #     pk=chat_id,
-        #     object_id=parent_id,
-        #     parent_chat_type=parent_chat_type
-        # ).exists():
-        #     parent_model = self.parent_models[0]
-
-        #     raise NotFound(
-        #         f'{parent_model.__name__} of id `{parent_id}` '
-        #         f'has no child Chat of id `{chat_id}`'
-        #     )
-
         chat = Chat.objects.get(pk=chat_id)
         
         if not (chat.object_id == int(parent_id) and 
@@ -338,26 +324,11 @@ class BaseMessageViewSet(ReadOnlyModelViewSet):
                 f'{parent_model.__name__} of id `{parent_id}` '
                 f'has no child Chat of id `{chat_id}`'
             )
-        
-        # debug code
-        # query_dict = {
-        #     'parent_id': parent_id,
-        #     'parent_chat_type': parent_chat_type,
-        #     'time_stamp__gte': chat.created_at,
-        #     'deleted_at': None
-        # }
 
         if chat.terminated_at is not None:
-            # debug code
-            # query_dict['time_stamp__lte'] = chat.terminated_at
-
-            # dev code
             raise ResourceLocked(
                 'The referenced Chat has been terminated'
             )
-
-        # debug code
-        # return Message.objects.filter(**query_dict)
 
         allowed_statuses = [
             Message.STATUS_SENT,
@@ -365,7 +336,6 @@ class BaseMessageViewSet(ReadOnlyModelViewSet):
             Message.STATUS_VIEWED
         ]
 
-        # dev code
         return Message.objects.filter(
             parent_id=parent_id,
             parent_chat_type=parent_chat_type,
@@ -375,8 +345,6 @@ class BaseMessageViewSet(ReadOnlyModelViewSet):
         )
     
     def get_serializer_class(self):
-        # if self.action == 'partial_update':
-        #     return UpdateMessageSerializer
         return MessageSerializer
 
     def get_serializer_context(self):

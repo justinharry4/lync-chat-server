@@ -220,23 +220,6 @@ class ChatSerializer(serializers.ModelSerializer):
         return instance
     
 
-# class UpdateChatSerializer(StrictUpdateModelSerializer):
-#     class Meta:
-#         model = Chat
-#         fields = ['terminated_at']
-
-#     def update(self, instance, validated_data):
-#         if instance.terminated_at is not None:
-#             raise ResourceLocked(
-#                 '`terminated_at` field can only be updated once'
-#             )
-        
-#         instance.terminated_at = datetime.datetime.now()
-#         instance.save()
-
-#         return instance
-
-
 # group chat participant serializer
 class GroupChatParticipantSerializer(serializers.ModelSerializer):
     group_chat = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -473,7 +456,6 @@ class UpdateMessageSerializer(StrictUpdateModelSerializer):
         if status:
             current_status = instance.delivery_status
             if status_order[current_status] > status_order[status]:
-            # if status_order[status] != (status_order[current_status] + 1):
                 errors['delivery_status'] = 'invalid status update sequence'
         
         single_update_fields = ['time_stamp', 'deleted_at']

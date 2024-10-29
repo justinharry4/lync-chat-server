@@ -30,8 +30,6 @@ class PrivateChatConsumer(BaseConsumer):
         async_to_sync(self.channel_layer.send)(channel_name, data)  
 
     def recieve_channel_layer_event(self, event):
-        print('channel event recieved')
-
         event_data = event['data']
         content_format = event_data.get('content_format')
         status = event_data.get('delivery_status')
@@ -67,9 +65,7 @@ class PrivateChatConsumer(BaseConsumer):
         }
 
         for client in clients:
-            # print('chat_client', client, client.user)
             channel_name = client.channel_name
-            # async_to_sync(self.channel_layer.send)(channel_name, channel_data)
             self.channel_layer_send(channel_name, channel_data)
 
     def send_text_data(self, message_data):
