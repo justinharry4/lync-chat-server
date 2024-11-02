@@ -57,7 +57,6 @@ class PrivateChat(models.Model):
         through='PrivateChatParticipant',
         related_name='private_chats'
     )
-    participant_users_tag = models.CharField(max_length=100, null=True)
 
     objects = PrivateChatManager()
 

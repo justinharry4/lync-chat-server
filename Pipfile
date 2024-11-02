@@ -14,8 +14,11 @@ djoser = "*"
 djangorestframework-simplejwt = "*"
 drf-nested-routers = "*"
 channels = {extras = ["daphne"], version = "*"}
+pytest-django = "*"
+model-bakery = "*"
 
 [dev-packages]
+pytest = "*"
 
 [requires]
 python_version = "3.10"
