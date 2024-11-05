@@ -3,7 +3,7 @@ from model_bakery import baker
 import pytest
 
 from core.models import User
-from chat.models import PrivateChatParticipant, PrivateChat
+from chat.models import PrivateChat
 
 
 @pytest.fixture
@@ -25,6 +25,12 @@ def call_list_pcs_endpoint(api_client):
     return make_api_call
 
 @pytest.fixture
+def call_delete_pc_endpoint(api_client):
+    def make_api_call(pk):
+        return api_client.delete(f'/chat/privatechats/{pk}/')
+    return make_api_call
+
+@pytest.fixture
 def is_member_of_private_chats():
     def check_membership(user, private_chats):
         for private_chat in private_chats:
@@ -33,7 +39,7 @@ def is_member_of_private_chats():
             if len(target) == 0:
                 return False
         return True
-    return check_membership
+    return check_membership 
 
 
 @pytest.mark.django_db
@@ -166,3 +172,67 @@ class TestListPrivateChats():
         
         assert response.status_code == status.HTTP_200_OK
         assert is_member_of_private_chats(users[0], response.data)
+
+
+@pytest.mark.django_db
+class TestDeletePrivateChat():
+    def test_if_user_is_anonymous_returns_401(self, call_delete_pc_endpoint):
+        response = call_delete_pc_endpoint(1)
+        
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_if_user_is_not_admin_returns_403(self,
+                                              authenticate,
+                                              create_private_chat,
+                                              call_delete_pc_endpoint):
+        users = baker.make(User, _quantity=2)
+        private_chat = create_private_chat(users)
+        authenticate(users[0])
+
+        response = call_delete_pc_endpoint(private_chat.id)
+        
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_if_user_is_admin_and_id_does_not_exist_returns_404(self,
+                                                                test_data,
+                                                                authenticate,
+                                                                call_delete_pc_endpoint):
+        user = baker.make(User, is_staff=True)
+        authenticate(user)
+
+        response = call_delete_pc_endpoint(test_data.INVALID_ID)
+    
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        
+    def test_if_user_is_admin_and_id_is_valid_returns_204(self,
+                                                          authenticate,
+                                                          create_private_chat,
+                                                          call_delete_pc_endpoint):
+        users = baker.make(User, _quantity=3, is_staff=True)
+        private_chat = create_private_chat(users[1:])
+        authenticate(users[0])
+
+        response = call_delete_pc_endpoint(private_chat.id)
+        
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not PrivateChat.objects.filter(pk=private_chat.id).exists()
+
+
+@pytest.mark.django_db
+class TestUpdatePrivateChat():
+    def test_if_put_method_returns_405(self, api_client, authenticate):
+        user = baker.make(User)
+        authenticate(user)
+
+        response = api_client.put('/chat/privatechats/1/', {})
+        
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        
+    def test_if_patch_method_returns_405(self, api_client, authenticate):
+        user = baker.make(User)
+        authenticate(user)
+        
+        response = api_client.patch('/chat/privatechats/1/', {})
+        
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        

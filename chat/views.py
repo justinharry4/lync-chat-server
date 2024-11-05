@@ -104,6 +104,8 @@ class PrivateChatViewSet(CustomWriteNoUpdateModelViewSet):
         return perms
 
     def get_queryset(self):
+        if self.action == 'destroy':
+            return PrivateChat.objects.all()
         return self.request.user.private_chats.all()
     
     def get_serializer_class(self):

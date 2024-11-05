@@ -44,5 +44,3 @@ def create_private_chats_for_user(create_private_chat):
             private_chats.append(private_chat)
         return private_chats
     return do_create_private_chats
-
-
