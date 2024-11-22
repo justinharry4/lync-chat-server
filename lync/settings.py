@@ -96,11 +96,8 @@ ASGI_APPLICATION = 'lync.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'lync',
-        'HOST': 'localhost',
-        'USER': 'root',
-        'PASSWORD': 'Svenburg@7',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

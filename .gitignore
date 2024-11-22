@@ -1,3 +1,6 @@
 chat/blank.py
 .*
 !.gitignore
+db.sqlite3
+media/chat/images/jay_*
+media/chat/images/mel_*

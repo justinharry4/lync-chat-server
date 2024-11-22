@@ -36,10 +36,7 @@ class Command(BaseCommand):
             (USER2_USERNAME, USER2_EMAIL, USER2_PASSWORD),
         ]
         photos_dir = settings.BASE_DIR / 'media' / 'chat' / 'images'
-        photo_paths = [
-            photos_dir / USER1_PHOTO,
-            photos_dir / USER2_PHOTO,
-        ]   
+        photo_paths = [photos_dir / USER1_PHOTO, photos_dir / USER2_PHOTO]
 
         try:
             users = []
