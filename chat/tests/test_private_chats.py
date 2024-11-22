@@ -6,6 +6,8 @@ from core.models import User
 from chat.models import PrivateChat
 
 
+# pc is used as short for private chats
+
 @pytest.fixture
 def call_create_pc_endpoint(api_client):
     def make_api_call(data):
