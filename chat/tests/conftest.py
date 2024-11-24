@@ -25,8 +25,8 @@ def authenticate(api_client):
 
 @fixture
 def authenticate_as_any(authenticate):
-    def do_auth():
-        user = baker.make(User)
+    def do_auth(**kwargs):
+        user = baker.make(User, **kwargs)
         authenticate(user)
         return user
     return do_auth

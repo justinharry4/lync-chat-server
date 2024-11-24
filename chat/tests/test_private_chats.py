@@ -52,10 +52,9 @@ class TestCreatePrivateChat():
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_if_repeated_id_in_ids_list_returns_400(self,
-                                                    authenticate,
+                                                    authenticate_as_any,
                                                     call_create_pc_endpoint):
-        user = baker.make(User)
-        authenticate(user)
+        user = authenticate_as_any()
 
         response = call_create_pc_endpoint({'participant_user_ids': [user.id, user.id]})
 
@@ -63,22 +62,21 @@ class TestCreatePrivateChat():
         assert response.data['participant_user_ids'] is not None
 
     def test_if_user_id_not_in_ids_list_returns_400(self,
-                                                    authenticate,
+                                                    authenticate_as_any,
                                                     call_create_pc_endpoint):
-        user1, user2, user3 = baker.make(User, _quantity=3)
-        authenticate(user1)
+        authenticate_as_any()
+        user1, user2 = baker.make(User, _quantity=2)
 
-        response = call_create_pc_endpoint({'participant_user_ids': [user2.id, user3.id]})
+        response = call_create_pc_endpoint({'participant_user_ids': [user1.id, user2.id]})
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data['participant_user_ids'] is not None
 
     def test_if_invalid_ids_returns_400(self,
                                         test_data,
-                                        authenticate,
+                                        authenticate_as_any,
                                         call_create_pc_endpoint):
-        user = baker.make(User)
-        authenticate(user)
+        user = authenticate_as_any()
 
         response = call_create_pc_endpoint({
             'participant_user_ids': [user.id, test_data.INVALID_ID]
@@ -87,10 +85,10 @@ class TestCreatePrivateChat():
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data['participant_user_ids'] is not None
 
-    def test_if_existing_chat_with_given_ids_returns_400(self,
-                                                         authenticate,
-                                                         call_create_pc_endpoint,
-                                                         create_private_chat):
+    def test_if_existing_pc_with_given_ids_returns_400(self,
+                                                       authenticate,
+                                                       call_create_pc_endpoint,
+                                                       create_private_chat):
         user1, user2 = baker.make(User, _quantity=2)
         create_private_chat([user1, user2])
         authenticate(user1)
@@ -99,7 +97,9 @@ class TestCreatePrivateChat():
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_if_new_valid_id_pair_returns_201(self, authenticate, call_create_pc_endpoint):
+    def test_if_new_valid_id_pair_returns_201(self,
+                                              authenticate,
+                                              call_create_pc_endpoint):
         user1, user2 = baker.make(User, _quantity=2)
         authenticate(user1)
 
@@ -117,35 +117,28 @@ class TestRetrievePrivateChat():
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_if_user_is_not_member_returns_403(self,
-                                               authenticate,
-                                               create_private_chat,
+                                               authenticate_as_non_pc_member,
                                                call_retrieve_pc_endpoint):
-        users = baker.make(User, _quantity=3)
-        private_chat = create_private_chat(users[:2])
-        authenticate(users[2])
+        user, private_chat = authenticate_as_non_pc_member()
 
         response = call_retrieve_pc_endpoint(private_chat.id)
         
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_if_id_does_not_exist_returns_404(self,
-                                              authenticate,
+                                              authenticate_as_any,
                                               test_data,
                                               call_retrieve_pc_endpoint):
-        user = baker.make(User)
-        authenticate(user)
+        authenticate_as_any()
 
         response = call_retrieve_pc_endpoint(test_data.INVALID_ID)
         
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_if_user_is_a_member_returns_200(self,
-                                             authenticate,
-                                             create_private_chat,
+                                             authenticate_as_pc_member,
                                              call_retrieve_pc_endpoint):
-        users = baker.make(User, _quantity=2)
-        private_chat = create_private_chat(users)
-        authenticate(users[0])
+        user, private_chat = authenticate_as_pc_member()
 
         response = call_retrieve_pc_endpoint(private_chat.id)
 
@@ -184,12 +177,9 @@ class TestDeletePrivateChat():
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_if_user_is_not_admin_returns_403(self,
-                                              authenticate,
-                                              create_private_chat,
+                                              authenticate_as_pc_member,
                                               call_delete_pc_endpoint):
-        users = baker.make(User, _quantity=2)
-        private_chat = create_private_chat(users)
-        authenticate(users[0])
+        user, private_chat = authenticate_as_pc_member()
 
         response = call_delete_pc_endpoint(private_chat.id)
         
@@ -197,22 +187,21 @@ class TestDeletePrivateChat():
 
     def test_if_user_is_admin_and_id_does_not_exist_returns_404(self,
                                                                 test_data,
-                                                                authenticate,
+                                                                authenticate_as_any,
                                                                 call_delete_pc_endpoint):
-        user = baker.make(User, is_staff=True)
-        authenticate(user)
+        authenticate_as_any(is_staff=True)
 
         response = call_delete_pc_endpoint(test_data.INVALID_ID)
     
         assert response.status_code == status.HTTP_404_NOT_FOUND
         
     def test_if_user_is_admin_and_id_is_valid_returns_204(self,
-                                                          authenticate,
+                                                          authenticate_as_any,
                                                           create_private_chat,
                                                           call_delete_pc_endpoint):
-        users = baker.make(User, _quantity=3, is_staff=True)
-        private_chat = create_private_chat(users[1:])
-        authenticate(users[0])
+        authenticate_as_any(is_staff=True)
+        users = baker.make(User, _quantity=2)
+        private_chat = create_private_chat(users)
 
         response = call_delete_pc_endpoint(private_chat.id)
         
@@ -222,17 +211,15 @@ class TestDeletePrivateChat():
 
 @pytest.mark.django_db
 class TestUpdatePrivateChat():
-    def test_if_put_method_returns_405(self, api_client, authenticate):
-        user = baker.make(User)
-        authenticate(user)
+    def test_if_put_method_returns_405(self, api_client, authenticate_as_any):
+        authenticate_as_any()
 
         response = api_client.put('/chat/privatechats/1/', {})
         
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
         
-    def test_if_patch_method_returns_405(self, api_client, authenticate):
-        user = baker.make(User)
-        authenticate(user)
+    def test_if_patch_method_returns_405(self, api_client, authenticate_as_any):
+        authenticate_as_any()
         
         response = api_client.patch('/chat/privatechats/1/', {})
         

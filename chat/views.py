@@ -247,11 +247,15 @@ class BaseChatViewSet(CustomWriteModelViewSet):
         parent_info = self.get_parent_info()
         parent_chat_type = parent_info['parent_chat_type']
         parent_chat_id = self.kwargs[self.parent_url_lookups[0]]
+
+        extra_lookups = {'user': self.request.user}
+        if self.action == 'destroy':
+            extra_lookups = {}
         
         return Chat.objects.filter(
-            user=self.request.user,
             object_id=parent_chat_id,
-            parent_chat_type=parent_chat_type
+            parent_chat_type=parent_chat_type,
+            **extra_lookups,
         )
     
     def get_serializer_context(self):

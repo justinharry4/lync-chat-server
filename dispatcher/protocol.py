@@ -7,7 +7,7 @@ Handlers are invoked according to the event type to which they
 are mapped. Event types are represented by custom user-defined
 status codes. 
 
-Messages sent over websockets by a client to the server are to 
+Messages sent over WebSockets by a client to the server are to 
 contain an indication of the status code (or event type) 
 associated with the message in order for `dispatcher` to
 determine what handler(s) to invoke when the message is recieved.
@@ -25,7 +25,7 @@ they adhere to the structure outlined below:
 }
 {HEADER_END}
 {
-    "some_key": "the content after header_head must be",
+    "some_key": "the content after {header_end} must be",
     "another_key": "a valid JSON string",
     "key_again": "the user determines what goes inside",
     "last_key": "the JSON string"
