@@ -29,22 +29,28 @@ below:
     pip install pipenv
     ```
 
-3. Install project dependencies
+3. Create virtual environment and install project dependencies
+   (Python version 3.10 or higher is recommended)
     ```
     pipenv install
     ```
 
-4. Run database migrations
+4. Activate virtual environment
+    ```
+    pipenv shell
+    ```
+
+5. Run database migrations
     ```
     python manage.py migrate
     ```
 
-5. Initialize database with dummy user data
+6. Populate database with dummy user data
     ```
     python manage.py createchatcontext
     ```
 
-6. Start the server application
+7. Start the server application
     ```
     python manage.py runserver
     ```
